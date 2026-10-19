@@ -1,0 +1,45 @@
+// User-facing error messages.
+// `db` keys mirror the stable keys the database returns in the error HINT
+// (supabase/migrations/003_*.sql and later). A test checks every HINT key has a message.
+export const errors = {
+  db: {
+    'err.auth.forbidden': 'ليس لديك صلاحية لإضافة ملاحظات على هذه الحالة.',
+    'err.auth.inactive': 'حسابك غير نشط، ولا يمكنك تعديل الحالات.',
+    'err.auth.owner_only': 'هذه العملية متاحة للمالك فقط.',
+    'err.batch.rep_create_open_only': 'المندوب يمكنه إنشاء دفعات مفتوحة باسمه فقط.',
+    'err.batch.rep_limited_edit': 'المندوب يمكنه تعديل الملاحظات والعدد المتوقع وملاحظات الفرق فقط.',
+    'err.case.immutable_column': 'لا يمكن تغيير رقم الحالة أو تاريخ إنشائها أو من سجّلها.',
+    'err.case.invalid_technician': 'الفني المختار غير موجود أو حسابه غير نشط.',
+    'err.case.invalid_work_type': 'نوع الشغل المختار غير موجود في القائمة أو موقوف. اختر نوعًا نشطًا.',
+    'err.case.invalid_transition': 'لا يمكن نقل الحالة إلى هذا الوضع من وضعها الحالي.',
+    'err.case.not_assigned_to_you': 'هذه الحالة غير معيّنة لك.',
+    'err.case.not_found': 'الحالة غير موجودة أو ليس لديك صلاحية الوصول إليها.',
+    'err.case.role_forbidden_status': 'دورك لا يسمح بنقل الحالة إلى هذا الوضع.',
+    'err.case.status_only': 'دورك يسمح بتغيير وضع الحالة فقط، وليس بياناتها.',
+    'err.event.notes_only': 'يمكن إضافة ملاحظات فقط، وسجل الأوضاع يُكتب تلقائيًا.',
+    'err.profile.immutable_column': 'لا يمكن تغيير البريد الإلكتروني أو المعرّف من التطبيق.',
+    'err.profile.invalid_replacement': 'اختر فنيًا آخر نشطًا لنقل الحالات إليه.',
+    'err.profile.last_owner': 'لا يمكن إيقاف آخر مالك نشط أو تغيير دوره.',
+    'err.profile.not_technician': 'المستخدم المحدد ليس فنيًا.',
+    'err.profile.self_edit_only': 'يمكنك تعديل اسمك ورقم هاتفك وصورتك فقط.',
+    'err.work_type.duplicate': 'يوجد نوع شغل بنفس الاسم بالفعل.',
+    'err.work_type.invalid_name': 'اسم نوع الشغل مطلوب (بحد أقصى 100 حرف).',
+    'err.validation.note': 'اكتب نص الملاحظة (بحد أقصى 2000 حرف).',
+    'err.validation.too_long': 'النص طويل جدًا (الحد الأقصى 2000 حرف).',
+  },
+  generic: {
+    permissionDenied: 'ليس لديك صلاحية لتنفيذ هذه العملية.',
+    duplicate: 'هذه القيمة مستخدمة بالفعل.',
+    invalidData: 'البيانات المدخلة غير صالحة.',
+    notFound: 'العنصر غير موجود أو ليس لديك صلاحية الوصول إليه.',
+    network: 'تعذر الاتصال بالخادم. تحقق من الاتصال بالإنترنت وحاول مرة أخرى.',
+    server: 'تعذر تنفيذ العملية على الخادم. حاول مرة أخرى لاحقًا.',
+    unknown: 'حدث خطأ غير متوقع. حاول مرة أخرى، وإذا تكرر تواصل مع المسؤول.',
+  },
+  auth: {
+    invalidCredentials: 'البريد الإلكتروني أو كلمة المرور غير صحيحة.',
+    emailNotConfirmed: 'لم يتم تأكيد البريد الإلكتروني بعد.',
+    rateLimited: 'محاولات كثيرة. انتظر قليلًا ثم حاول مرة أخرى.',
+    sessionExpired: 'انتهت الجلسة. سجّل الدخول مرة أخرى.',
+  },
+};

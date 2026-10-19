@@ -1,0 +1,115 @@
+@import 'tailwindcss';
+
+/*
+ * Cairo (SIL Open Font License 1.1, see src/assets/fonts/cairo/OFL.txt).
+ * Self-hosted variable woff2 files, bundled by Vite: no request to Google at runtime.
+ */
+@font-face {
+  font-family: 'Cairo';
+  font-style: normal;
+  font-weight: 200 1000;
+  font-display: swap;
+  src: url('./assets/fonts/cairo/cairo-arabic.woff2') format('woff2');
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
+}
+@font-face {
+  font-family: 'Cairo';
+  font-style: normal;
+  font-weight: 200 1000;
+  font-display: swap;
+  src: url('./assets/fonts/cairo/cairo-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Cairo';
+  font-style: normal;
+  font-weight: 200 1000;
+  font-display: swap;
+  src: url('./assets/fonts/cairo/cairo-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@theme static {
+  --font-sans: 'Cairo', system-ui, -apple-system, 'Segoe UI', Tahoma, sans-serif;
+
+  /*
+   * Dolphin Orthodontic Lab brand colors, sampled from public/branding/logo.jpg.
+   * Contrast (WCAG): gold on teal 8.3:1, white on teal 11.6:1, white on red 5.2:1.
+   * NEVER use gold for text on white/light backgrounds (1.4:1). Red is an accent
+   * line only on teal (2.2:1), never text there.
+   */
+  --color-brand-teal: #063f4a;
+  --color-brand-teal-hover: #0a5563;
+  --color-brand-teal-50: #e6f0f2;
+  --color-brand-gold: #f4d88f;
+  --color-brand-red: #cc3136;
+  --color-brand-red-hover: #a8282c;
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --primary: var(--color-brand-teal);
+  --primary-foreground: #ffffff;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: var(--color-brand-teal);
+  --destructive: var(--color-brand-red);
+  --destructive-foreground: #ffffff;
+  --success: #22c55e;
+  --success-foreground: #ffffff;
+  --warning: #f59e0b;
+  --warning-foreground: #ffffff;
+  --radius: 0.5rem;
+  --sidebar-width: 260px;
+}
+
+/*
+ * Base styles live in @layer base so Tailwind utilities (p-4, mt-2, ...) can
+ * override them. Unlayered rules beat every layered utility in Tailwind v4.
+ * The margin/padding/box-sizing reset is already provided by Tailwind preflight.
+ */
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--background);
+    color: var(--foreground);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}

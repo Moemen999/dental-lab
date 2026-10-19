@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Environment (never commit real secrets)
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Build output
+dist/
+dist-ssr/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Supabase
+supabase/.temp/
+supabase/.branches/
+
+# Testing
+coverage/
+playwright-report/
+test-results/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Database backups and dumps (contain real data, never commit)
+backups/
+*.dump
+*.backup
+*.sql.gz
+*.sql.gpg
+*.sql.enc
+*.age
+
+# Local-only files kept on disk but never published
+local-only/
+
+# Third-party agent skills (not ours to publish)
+.claude/skills/
+.agents/skills/
+.agent/skills/
+skills-lock.json

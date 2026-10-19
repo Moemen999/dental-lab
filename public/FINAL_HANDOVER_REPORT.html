@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Dental Laboratory Case Management System — Final Handover Report</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 18mm 16mm 18mm 16mm;
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #1e293b;
+      background: #ffffff;
+      line-height: 1.55;
+      font-size: 10pt;
+    }
+    
+    .header-banner {
+      border-bottom: 2px solid #2563eb;
+      padding-bottom: 14px;
+      margin-bottom: 22px;
+    }
+    
+    .badge-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 8pt;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .badge-primary { background: #dbeafe; color: #1e40af; }
+    .badge-success { background: #dcfce7; color: #166534; }
+    .badge-slate { background: #f1f5f9; color: #475569; }
+    
+    h1 {
+      font-size: 19pt;
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.25;
+      margin-bottom: 6px;
+    }
+    
+    .subtitle {
+      font-size: 10.5pt;
+      color: #64748b;
+    }
+    
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 24px;
+      font-size: 8.5pt;
+    }
+    
+    .meta-item strong {
+      display: block;
+      color: #475569;
+      font-size: 7.5pt;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    
+    h2 {
+      font-size: 12.5pt;
+      font-weight: 700;
+      color: #0f172a;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 4px;
+      margin-top: 20px;
+      margin-bottom: 10px;
+      page-break-after: avoid;
+    }
+    
+    h3 {
+      font-size: 10pt;
+      font-weight: 600;
+      color: #1e293b;
+      margin-top: 12px;
+      margin-bottom: 6px;
+      page-break-after: avoid;
+    }
+    
+    p {
+      margin-bottom: 8px;
+      color: #334155;
+    }
+    
+    ul, ol {
+      margin-left: 20px;
+      margin-bottom: 10px;
+    }
+    
+    li {
+      margin-bottom: 4px;
+      color: #334155;
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 16px 0;
+      font-size: 8.5pt;
+      page-break-inside: avoid;
+    }
+    
+    th, td {
+      border: 1px solid #cbd5e1;
+      padding: 6px 9px;
+      text-align: left;
+      vertical-align: top;
+    }
+    
+    th {
+      background: #f1f5f9;
+      color: #1e293b;
+      font-weight: 600;
+    }
+    
+    tr:nth-child(even) td {
+      background: #f8fafc;
+    }
+    
+    .text-center { text-align: center; }
+    
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 8.5pt;
+      background: #f1f5f9;
+      padding: 1px 4px;
+      border-radius: 3px;
+      color: #0f172a;
+    }
+    
+    pre {
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 8pt;
+      overflow-x: auto;
+      margin: 8px 0 12px 0;
+      line-height: 1.45;
+      page-break-inside: avoid;
+    }
+    
+    pre code {
+      background: transparent;
+      color: inherit;
+      padding: 0;
+    }
+    
+    .callout {
+      border-left: 4px solid #2563eb;
+      background: #eff6ff;
+      padding: 8px 12px;
+      margin: 10px 0;
+      font-size: 9pt;
+      border-radius: 0 4px 4px 0;
+      page-break-inside: avoid;
+    }
+    
+    .callout-warning {
+      border-left-color: #f59e0b;
+      background: #fffbeb;
+    }
+    
+    .page-break {
+      page-break-before: always;
+    }
+    
+    .footer-note {
+      margin-top: 30px;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 10px;
+      font-size: 8pt;
+      color: #94a3b8;
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header Banner -->
+  <div class="header-banner">
+    <div class="badge-bar">
+      <span class="badge badge-primary">Technical Handover Document</span>
+      <span class="badge badge-success">Production Ready</span>
+      <span class="badge badge-slate">Vitest 29/29 Passing</span>
+    </div>
+    <h1>Dental Laboratory Case Management System</h1>
+    <div class="subtitle">Comprehensive System Engineering Handover &amp; Operational Verification Report</div>
+  </div>
+
+  <!-- Metadata Table -->
+  <div class="meta-grid">
+    <div class="meta-item">
+      <strong>Project Target</strong>
+      Dental Laboratory CMS
+    </div>
+    <div class="meta-item">
+      <strong>Core Stack</strong>
+      React 19 + TypeScript + Supabase
+    </div>
+    <div class="meta-item">
+      <strong>Verification Status</strong>
+      100% Pass (Build: 0 errors)
+    </div>
+    <div class="meta-item">
+      <strong>Handover Date</strong>
+      October 2026
+    </div>
+  </div>
+
+  <!-- 1. Executive Summary & Features -->
+  <h2>1. Implemented Features &amp; Functional Scope</h2>
+  <p>The Dental Laboratory Case Management System (CMS) manages the complete physical and digital lifecycle of custom dental prosthetics, restorations, and appliances. The system has been architected, coded, verified, and documented from scratch.</p>
+
+  <h3>A. Core Case Lifecycle &amp; State Machine</h3>
+  <ul>
+    <li><strong>Atomic Monthly Case Numbering</strong>: Server-side generation using PostgreSQL function <code>generate_case_number()</code> with row locking. Formats as <code>CASE-YYYYMM-NNNNN</code>, resets each month, guarantees collision-free concurrency, and scales past 99,999 without truncation or recycling.</li>
+    <li><strong>Independent Case Traceability</strong>: Every case maintains an independent identity, clinical prescription, and status history. Delivery batches group logistical transfers without merging individual cases.</li>
+    <li><strong>Database-Enforced State Machine</strong>: Trigger <code>trg_validate_case_status</code> validates all status transitions across all 14 statuses:
+      <br>
+      <code>intake_pending &rarr; registered &rarr; awaiting_assignment &rarr; assigned &rarr; in_progress &rarr; completed &rarr; awaiting_reception_receipt &rarr; received_by_reception &rarr; awaiting_representative_pickup &rarr; with_representative &rarr; delivered</code> (with <code>on_hold</code>, <code>rework_required</code>, and <code>cancelled</code> branches).
+    </li>
+    <li><strong>Physical Handoff Separation</strong>: Technician completion is strictly distinguished from reception's physical receipt. Delivery staging is decoupled from driver pickup and clinic receipt.</li>
+    <li><strong>Immutable Event Logs</strong>: <code>case_events</code> and <code>audit_logs</code> tables are strictly append-only. <code>UPDATE</code> and <code>DELETE</code> privileges have been explicitly revoked in PostgreSQL.</li>
+  </ul>
+
+  <h3>B. Dedicated Role-Based Workspaces</h3>
+  <ul>
+    <li><strong>Owner Dashboard (<code>/</code>)</strong>: Executive KPI metric cards, case pipeline workflow counts, overdue alerts, recent cases table, and administrative audit monitoring.</li>
+    <li><strong>Receptionist Dashboard (<code>/</code>)</strong>: Front-desk check-in, unassigned queue, one-click technician assignment modal, receipt verification, and dispatch staging.</li>
+    <li><strong>Technician Workbench (<code>/</code>)</strong>: Personal workbench showing only assigned cases, tooth numbers, shade guide, start work, pause on hold with reason, and submit to reception.</li>
+    <li><strong>Representative Logistics (<code>/</code> &amp; <code>/deliveries</code>)</strong>: Intake batch creation, manifest management, box count discrepancy reporting, and clinic delivery confirmation.</li>
+    <li><strong>Case Management (<code>/cases</code> &amp; <code>/cases/:id</code>)</strong>: Search by case number or patient, status filters, pagination, assignment dialogs, interactive status transitions, and chronological event timelines.</li>
+    <li><strong>Case Registration Form (<code>/cases/new</code>)</strong>: Form capturing patient details, clinic/doctor references (with inline clinic creation), tooth notation, shade guide, due dates, and priority.</li>
+    <li><strong>Staff Management (<code>/employees</code>)</strong>: Owner portal for staff invites, role modification, active/inactive toggles, password reset dispatch, and automated inspection of active cases before deactivating technicians.</li>
+    <li><strong>System Audit Log (<code>/audit</code>)</strong>: Immutable security timeline inspecting all user management actions, role updates, and system events.</li>
+  </ul>
+
+  <!-- 2. Technology Stack & Architecture -->
+  <h2>2. Technology Stack &amp; Architecture Decisions</h2>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 25%;">Layer</th>
+        <th style="width: 35%;">Technology</th>
+        <th style="width: 40%;">Architectural Rationale</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Frontend Framework</strong></td>
+        <td>React 19 + TypeScript</td>
+        <td>Strict compile-time type safety, component modularity, and high rendering performance.</td>
+      </tr>
+      <tr>
+        <td><strong>Build Tool &amp; Bundler</strong></td>
+        <td>Vite 8 + <code>@tailwindcss/vite</code></td>
+        <td>Sub-second HMR, optimized tree-shaking producing a 558 KB production bundle (161 KB gzipped).</td>
+      </tr>
+      <tr>
+        <td><strong>Styling &amp; Design System</strong></td>
+        <td>Tailwind CSS v4 + Design Tokens</td>
+        <td>Accessible, responsive design system with zero runtime CSS overhead and unified color variables.</td>
+      </tr>
+      <tr>
+        <td><strong>State &amp; Cache</strong></td>
+        <td>TanStack Query v5</td>
+        <td>Automatic background refetching, query deduplication, and mutation cache invalidation.</td>
+      </tr>
+      <tr>
+        <td><strong>Routing &amp; Guards</strong></td>
+        <td>React Router v7</td>
+        <td>Declarative route protection (<code>ProtectedRoute</code>) and role-based entrypoints (<code>DashboardRouter</code>).</td>
+      </tr>
+      <tr>
+        <td><strong>Database &amp; Auth</strong></td>
+        <td>Supabase (PostgreSQL 15+)</td>
+        <td>Full relational integrity, atomic sequence counters, Row-Level Security, zero server maintenance costs.</td>
+      </tr>
+      <tr>
+        <td><strong>Privileged Server Logic</strong></td>
+        <td>Supabase Edge Functions</td>
+        <td>Deno runtime for administrative operations requiring the service-role key (user provisioning, session revocation).</td>
+      </tr>
+      <tr>
+        <td><strong>Automated Testing</strong></td>
+        <td>Vitest 5.0.4 + JSDOM</td>
+        <td>Fast ESM test runner integrated with Vite path aliases; 29/29 tests pass cleanly.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Page Break for Clean Printing -->
+  <div class="page-break"></div>
+
+  <!-- 3. Database Schema & Tables -->
+  <h2>3. Database Schema &amp; Relational Architecture</h2>
+  <p>The database schema enforces referential integrity through foreign keys, domain check constraints, and Row Level Security across all entities:</p>
+  
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 24%;">Table Name</th>
+        <th style="width: 28%;">Primary / Foreign Keys</th>
+        <th style="width: 48%;">Purpose &amp; Security Controls</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>profiles</code></td>
+        <td>PK: <code>id</code> (UUID)<br>FK: <code>auth.users(id)</code></td>
+        <td>Internal laboratory staff profiles. Stores role, status, email. Guarded by <code>protect_last_active_owner</code> trigger.</td>
+      </tr>
+      <tr>
+        <td><code>dentists</code></td>
+        <td>PK: <code>id</code> (UUID)<br>FK: <code>created_by</code></td>
+        <td>External dental clinics and practitioners. External reference entity (no system login).</td>
+      </tr>
+      <tr>
+        <td><code>monthly_case_counters</code></td>
+        <td>PK: <code>year_month</code> (TEXT)</td>
+        <td>Atomic monthly counter (YYYYMM). Updated via <code>SELECT FOR UPDATE</code> in <code>generate_case_number()</code>. Direct client access revoked.</td>
+      </tr>
+      <tr>
+        <td><code>cases</code></td>
+        <td>PK: <code>id</code> (UUID)<br>UK: <code>case_number</code><br>FK: <code>dentist_id</code>, <code>assigned_technician_id</code></td>
+        <td>Principal case entity. Stores patient demographics, clinical tooth/shade specs, due date, and workflow state. Validated by transition trigger.</td>
+      </tr>
+      <tr>
+        <td><code>delivery_batches</code></td>
+        <td>PK: <code>id</code> (UUID)<br>UK: <code>batch_reference</code><br>FK: <code>representative_id</code></td>
+        <td>Physical transfer batches. Tracks intake/return status, expected count vs. actual count, and discrepancy remarks.</td>
+      </tr>
+      <tr>
+        <td><code>batch_cases</code></td>
+        <td>PK: <code>id</code> (UUID)<br>FK: <code>batch_id</code>, <code>case_id</code></td>
+        <td>Many-to-many junction joining batches and individual cases. Ensures cases remain independently traceable.</td>
+      </tr>
+      <tr>
+        <td><code>case_events</code></td>
+        <td>PK: <code>id</code> (UUID)<br>FK: <code>case_id</code>, <code>actor_id</code></td>
+        <td><strong>IMMUTABLE</strong> operational event log. Records every status transition, handoff, and internal note. UPDATE and DELETE revoked.</td>
+      </tr>
+      <tr>
+        <td><code>technician_assignments</code></td>
+        <td>PK: <code>id</code> (UUID)<br>FK: <code>case_id</code>, <code>technician_id</code></td>
+        <td>Historical assignment records. Tracks active technician, assignment timestamp, receipt acknowledgement, and reassignment reasons.</td>
+      </tr>
+      <tr>
+        <td><code>audit_logs</code></td>
+        <td>PK: <code>id</code> (UUID)<br>FK: <code>actor_id</code></td>
+        <td><strong>IMMUTABLE</strong> administrative security log. Captures user provisioning, role adjustments, and deactivations. UPDATE and DELETE revoked.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- 4. Roles & Permissions -->
+  <h2>4. Available Roles &amp; Permissions Matrix (RBAC)</h2>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 36%;">Action / Resource</th>
+        <th style="width: 16%;" class="text-center">Owner</th>
+        <th style="width: 16%;" class="text-center">Receptionist</th>
+        <th style="width: 16%;" class="text-center">Representative</th>
+        <th style="width: 16%;" class="text-center">Technician</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>View All Cases</td>
+        <td class="text-center">Full</td>
+        <td class="text-center">Full</td>
+        <td class="text-center">Full</td>
+        <td class="text-center">Assigned Only</td>
+      </tr>
+      <tr>
+        <td>Register New Case &amp; Clinic</td>
+        <td class="text-center">&#10003; Allowed</td>
+        <td class="text-center">&#10003; Allowed</td>
+        <td class="text-center">&#10007; Denied</td>
+        <td class="text-center">&#10007; Denied</td>
+      </tr>
+      <tr>
+        <td>Assign / Reassign Technician</td>
+        <td class="text-center">&#10003; Allowed</td>
+        <td class="text-center">&#10003; Allowed</td>
+        <td class="text-center">&#10007; Denied</td>
+        <td class="text-center">&#10007; Denied</td>
+      </tr>
+      <tr>
+        <td>Start Work / Mark Completed</td>
+        <td class="text-center">&#10003; Allowed</td>
+        <td class="text-center">&#10007; Denied</td>
+        <td class="text-center">&#10007; Denied</td>
+        <td class="text-center">&#10003; Assigned Only</td>
+      </tr>
+      <tr>
+        <td>Submit to Reception (Stage D)</td>
+        <td class="text-center">&#10003; Allowed</td>
+        <td class="text-center">&#10007; Denied</td>
+        <td class="text-center">&#10007; Denied</td>
+        <td class="text-center">&#10003; Assigned Only</td>
+      </tr>
+      <tr>
+        <td>Acknowledge Physical Receipt</td>
+        <td class="text-center">&#10003; Allowed</td>
+        <td class="text-center">&#10003; Allowed</td>
+        <td class="text-center">&#10007; Denied</td>
+        <td class="text-center">&#10007; Denied</td>
+      </tr>
+      <tr>
+        <td>Pick Up Return Batch (Stage E)</td>
+        <td class="text-center">&#10003; Allowed</td>
+        <td class="text-center">&#10007; Denied</td>
+        <td class="text-center">&#10003; Allowed</td>
+        <td class="text-center">&#10007; Denied</td>
+      </tr>
+      <tr>
+        <td>Confirm Clinic Delivery (Stage F)</td>
+        <td class="text-center">&#10003; Allowed</td>
+        <td class="text-center">&#10007; Denied</td>
+        <td class="text-center">&#10003; Allowed</td>
+        <td class="text-center">&#10007; Denied</td>
+      </tr>
+      <tr>
+        <td>Put On Hold / Request Rework</td>
+        <td class="text-center">&#10003; Allowed</td>
+        <td class="text-center">&#10003; Allowed</td>
+        <td class="text-center">&#10007; Denied</td>
+        <td class="text-center">&#10003; Assigned Only</td>
+      </tr>
+      <tr>
+        <td>Manage Employees &amp; Permissions</td>
+        <td class="text-center">&#10003; Allowed</td>
+        <td class="text-center">&#10007; Denied</td>
+        <td class="text-center">&#10007; Denied</td>
+        <td class="text-center">&#10007; Denied</td>
+      </tr>
+      <tr>
+        <td>View System Security Audit Logs</td>
+        <td class="text-center">&#10003; Allowed</td>
+        <td class="text-center">&#10007; Denied</td>
+        <td class="text-center">&#10007; Denied</td>
+        <td class="text-center">&#10007; Denied</td>
+      </tr>
+      <tr>
+        <td>Modify / Delete Historical Events</td>
+        <td class="text-center">&#10007; <strong>FORBIDDEN</strong></td>
+        <td class="text-center">&#10007; <strong>FORBIDDEN</strong></td>
+        <td class="text-center">&#10007; <strong>FORBIDDEN</strong></td>
+        <td class="text-center">&#10007; <strong>FORBIDDEN</strong></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Page Break for Clean Printing -->
+  <div class="page-break"></div>
+
+  <!-- 5. Build, Test & Security Results -->
+  <h2>5. Actual Build, Test &amp; Security Results</h2>
+  
+  <h3>A. Automated Test Execution (Vitest 5.0.4)</h3>
+  <p>The entire test suite passed with 29 passing assertions in 1.64 seconds:</p>
+  <pre><code> RUN  v5.0.4
+ ✓ src/test/handoffs.test.ts (3 tests)
+ ✓ src/test/caseNumber.test.ts (5 tests)
+ ✓ src/test/stateMachine.test.ts (4 tests)
+ ✓ src/test/employeeAdmin.test.ts (4 tests)
+ ✓ src/test/permissions.test.ts (8 tests)
+ ✓ src/test/utils.test.ts (5 tests)
+
+ Test Files  6 passed (6)
+      Tests  29 passed (29)
+   Duration  1.64s</code></pre>
+
+  <h3>B. Production Build Verification</h3>
+  <p>TypeScript compiler checks and Vite asset optimization passed cleanly with zero errors:</p>
+  <pre><code>> tsc -b && vite build
+✓ 2041 modules transformed.
+dist/index.html                             0.79 kB │ gzip:  0.39 kB
+dist/assets/index-DT4Dbr8a.css             35.94 kB │ gzip:  7.74 kB
+dist/assets/rolldown-runtime-CbXtAM7H.js    0.58 kB │ gzip:  0.36 kB
+dist/assets/index-Wqh2Kh5S.js               0.95 kB │ gzip:  0.57 kB
+dist/assets/query-DR6sRXM9.js              43.00 kB │ gzip: 13.02 kB
+dist/assets/supabase-1yby8ldT.js          214.04 kB │ gzip: 55.06 kB
+dist/assets/vendor-CotpznSL.js            264.82 kB │ gzip: 84.68 kB
+✓ built in 539ms</code></pre>
+
+  <h3>C. Security &amp; Authorization Safeguards Verified</h3>
+  <ul>
+    <li><strong>Last Active Owner Invariant</strong>: Verified that trigger <code>protect_last_active_owner</code> rejects deactivating, demoting, or deleting the sole active Owner.</li>
+    <li><strong>Technician IDOR Protection</strong>: Verified that technicians cannot read, modify, or advance cases assigned to other technicians.</li>
+    <li><strong>Deactivation &amp; Reassignment Procedure</strong>: Verified that function <code>reassign_and_deactivate_technician</code> detects open cases, reassigns them to an active replacement, creates historical audit events, and disables user sessions.</li>
+    <li><strong>Event Log Immutability</strong>: Verified that <code>UPDATE</code> and <code>DELETE</code> operations are revoked on <code>case_events</code> and <code>audit_logs</code>.</li>
+  </ul>
+
+  <!-- 6. Local Running & Commands -->
+  <h2>6. Local Execution &amp; Commands</h2>
+  <pre><code># 1. Install dependencies
+npm install
+
+# 2. Run automated test suite
+npm test
+
+# 3. Start local development server (Vite on http://localhost:5173)
+npm run dev
+
+# 4. Compile for production
+npm run build</code></pre>
+
+  <!-- 7. Environment Variables -->
+  <h2>7. Environment Variables Configuration</h2>
+  <div class="callout">
+    <strong>Security Policy:</strong> The browser bundle contains only public anonymous credentials. The <code>SUPABASE_SERVICE_ROLE_KEY</code> is never committed, bundled, or exposed to the frontend.
+  </div>
+  <pre><code># Required in .env for frontend development:
+VITE_SUPABASE_URL=https://[YOUR_PROJECT_ID].supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+# Server-side ONLY (Supabase Edge Function secrets):
+# SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here</code></pre>
+
+  <!-- 8. Database Migrations & Initial Setup -->
+  <h2>8. Database Migration &amp; Initial Owner Provisioning</h2>
+  <ol>
+    <li>Log into the <strong>Supabase Dashboard</strong> &rarr; Open the <strong>SQL Editor</strong>.</li>
+    <li>Execute migration files in order:
+      <ul>
+        <li><code>supabase/migrations/001_initial_schema.sql</code> (Custom enums, tables, sequences, functions, triggers, and RLS).</li>
+        <li><code>supabase/migrations/002_owner_protections.sql</code> (Owner guards, outstanding checks, and atomic reassignment).</li>
+        <li><em>(Optional Demo Seed)</em> <code>scripts/seed_demo_data.sql</code> (Populates sample dentists and test cases).</li>
+      </ul>
+    </li>
+    <li><strong>Initial Owner Provisioning (Zero-Backdoor Procedure)</strong>:
+      <ul>
+        <li>Under <strong>Authentication &gt; Users</strong>, click <strong>"Add user"</strong> &rarr; <strong>"Create user"</strong>.</li>
+        <li>Enter the Owner's email (e.g. <code>owner@dentallab.com</code>) and a temporary password. Check <strong>"Auto Confirm User"</strong>.</li>
+        <li>In the SQL Editor, grant the initial Owner role:
+          <pre><code>UPDATE profiles SET role = 'owner', status = 'active' WHERE email = 'owner@dentallab.com';</code></pre>
+        </li>
+        <li>The Owner can now sign in at <code>/login</code> and manage staff from <code>/employees</code>.</li>
+      </ul>
+    </li>
+  </ol>
+
+  <!-- Page Break for Clean Printing -->
+  <div class="page-break"></div>
+
+  <!-- 9. Deployment & Free-Tier Limitations -->
+  <h2>9. Deployment &amp; Free-Tier Operational Guarantees</h2>
+  <p>The system is designed to operate completely within free-tier service limits:</p>
+  <ul>
+    <li><strong>Hosting (Vercel / Netlify)</strong>: Zero hosting costs using static SPA deployment with rewrite rule pointing to <code>/index.html</code>.</li>
+    <li><strong>Database Storage (500 MB Quota)</strong>: Supabase free tier provides 500 MB of PostgreSQL storage, accommodating approximately <strong>250,000 cases</strong>. If the quota is approached, completed cases can be exported using the provided backup scripts.</li>
+    <li><strong>Inactivity Pausing (7 Days)</strong>: Supabase free projects pause after 7 consecutive days of zero API requests. In daily dental lab operations, pausing will not occur. If paused during holiday shutdowns, unpausing takes 1&ndash;2 minutes from the Supabase dashboard.</li>
+    <li><strong>Off-Site Backups</strong>: Run the automated backup scripts to preserve off-site database copies:
+      <br>
+      Windows: <code>.\scripts\backup.ps1 -DatabaseUrl "postgresql://postgres:[PASSWORD]@[HOST]:5432/postgres"</code>
+      <br>
+      Linux/macOS: <code>./scripts/backup.sh "postgresql://postgres:[PASSWORD]@[HOST]:5432/postgres"</code>
+    </li>
+  </ul>
+
+  <!-- 10. Known Limitations -->
+  <h2>10. Known Limitations &amp; Future Recommendations</h2>
+  <ul>
+    <li><strong>Case File Attachments</strong>: Kept optional in Phase 1 to prevent exceeding the 1 GB Supabase free storage limit. Prescription slips and clinical notes are currently captured in structured text fields.</li>
+    <li><strong>Email Rate Limits</strong>: Built-in Supabase Auth email service is limited to 30 emails/hour on the free tier. For large-scale labs with frequent invitations, connecting a custom SMTP service (e.g. Resend free tier) is recommended.</li>
+  </ul>
+
+  <!-- 11. Documentation Index -->
+  <h2>11. Complete Documentation Index</h2>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 32%;">Document</th>
+        <th style="width: 25%;">File Path</th>
+        <th style="width: 43%;">Content Summary</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Project Specification</strong></td>
+        <td><code>docs/PROJECT_SPECIFICATION.md</code></td>
+        <td>Business context, roles, core requirements, and acceptance criteria.</td>
+      </tr>
+      <tr>
+        <td><strong>Architecture Specification</strong></td>
+        <td><code>docs/ARCHITECTURE.md</code></td>
+        <td>Trust boundaries, 3-tier design, data flow, and technology decisions.</td>
+      </tr>
+      <tr>
+        <td><strong>Database Schema</strong></td>
+        <td><code>docs/DATABASE_SCHEMA.md</code></td>
+        <td>Complete data dictionary, column types, constraints, and indexes.</td>
+      </tr>
+      <tr>
+        <td><strong>Entity-Relationship Diagram</strong></td>
+        <td><code>docs/ERD.md</code></td>
+        <td>Mermaid ER diagram showing entity relationships and foreign keys.</td>
+      </tr>
+      <tr>
+        <td><strong>Permissions Matrix</strong></td>
+        <td><code>docs/PERMISSIONS_MATRIX.md</code></td>
+        <td>RBAC matrix across all 4 roles and negative authorization rules.</td>
+      </tr>
+      <tr>
+        <td><strong>Case Workflow</strong></td>
+        <td><code>docs/CASE_WORKFLOW.md</code></td>
+        <td>State machine lifecycle, handoffs, and valid transition rules.</td>
+      </tr>
+      <tr>
+        <td><strong>Security Architecture</strong></td>
+        <td><code>docs/SECURITY.md</code></td>
+        <td>OWASP threat model, RLS policies, IDOR defenses, and secrets isolation.</td>
+      </tr>
+      <tr>
+        <td><strong>Security Checklist</strong></td>
+        <td><code>docs/SECURITY_CHECKLIST.md</code></td>
+        <td>Verification checklist tracking implemented OWASP controls.</td>
+      </tr>
+      <tr>
+        <td><strong>Agent Skills Report</strong></td>
+        <td><code>docs/AGENT_SKILLS.md</code></td>
+        <td>Skills discovery, evaluation, and usage report.</td>
+      </tr>
+      <tr>
+        <td><strong>Test Plan &amp; Results</strong></td>
+        <td><code>docs/TEST_PLAN.md</code></td>
+        <td>Test strategy, suite breakdown, and 29/29 passing test results.</td>
+      </tr>
+      <tr>
+        <td><strong>Deployment Guide</strong></td>
+        <td><code>docs/DEPLOYMENT.md</code></td>
+        <td>Setup, initial Owner provisioning, backups, and free-tier quotas.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="footer-note">
+    <span>Dental Laboratory Case Management System &bull; Technical Handover</span>
+    <span>Generated October 2026</span>
+  </div>
+
+</body>
+</html>
