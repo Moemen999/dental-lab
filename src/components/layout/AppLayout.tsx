@@ -16,6 +16,9 @@ import {
   User,
   Truck,
   ListChecks,
+  AlarmClock,
+  Tags,
+  Wallet,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { AutoDir } from '@/components/ui/Bidi';
@@ -40,18 +43,23 @@ export function AppLayout() {
         return [
           { label: t('layout.nav.dashboard'), path: '/', icon: <LayoutDashboard className="h-5 w-5" /> },
           { label: t('layout.nav.cases'), path: '/cases', icon: <FileText className="h-5 w-5" /> },
+          { label: t('layout.nav.lateCases'), path: '/late-cases', icon: <AlarmClock className="h-5 w-5" /> },
           { label: t('layout.nav.batches'), path: '/batches', icon: <Package className="h-5 w-5" /> },
           { label: t('layout.nav.dentists'), path: '/dentists', icon: <Stethoscope className="h-5 w-5" /> },
           { label: t('layout.nav.employees'), path: '/employees', icon: <Users className="h-5 w-5" /> },
           { label: t('layout.nav.workTypes'), path: '/work-types', icon: <ListChecks className="h-5 w-5" /> },
+          { label: t('layout.nav.pricing'), path: '/pricing', icon: <Tags className="h-5 w-5" /> },
+          { label: t('layout.nav.accounts'), path: '/accounts', icon: <Wallet className="h-5 w-5" /> },
           { label: t('layout.nav.audit'), path: '/audit', icon: <Shield className="h-5 w-5" /> },
         ];
       case 'receptionist':
         return [
           { label: t('layout.nav.dashboard'), path: '/', icon: <LayoutDashboard className="h-5 w-5" /> },
           { label: t('layout.nav.cases'), path: '/cases', icon: <FileText className="h-5 w-5" /> },
+          { label: t('layout.nav.lateCases'), path: '/late-cases', icon: <AlarmClock className="h-5 w-5" /> },
           { label: t('layout.nav.batches'), path: '/batches', icon: <Package className="h-5 w-5" /> },
           { label: t('layout.nav.dentists'), path: '/dentists', icon: <Stethoscope className="h-5 w-5" /> },
+          { label: t('layout.nav.accounts'), path: '/accounts', icon: <Wallet className="h-5 w-5" /> },
         ];
       case 'technician':
         return [
@@ -80,7 +88,7 @@ export function AppLayout() {
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden print:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -88,7 +96,7 @@ export function AppLayout() {
       {/* Sidebar: sits on the start edge (right in RTL) */}
       <aside
         className={cn(
-          'fixed inset-y-0 start-0 z-50 flex w-[260px] flex-col border-e border-[var(--border)] bg-white transition-transform duration-200 lg:translate-x-0',
+          'fixed inset-y-0 start-0 z-50 flex w-[260px] flex-col border-e border-[var(--border)] bg-white transition-transform duration-200 lg:translate-x-0 print:hidden',
           // Off-canvas toward the start edge, which is the right side in this RTL-only app.
           sidebarOpen ? 'translate-x-0' : 'translate-x-full'
         )}
@@ -165,9 +173,9 @@ export function AppLayout() {
       </aside>
 
       {/* Main content */}
-      <div className="lg:ps-[260px]">
+      <div className="lg:ps-[260px] print:ps-0">
         {/* Header */}
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-[var(--border)] bg-white px-4 lg:px-6">
+        <header className="print:hidden sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-[var(--border)] bg-white px-4 lg:px-6">
           <button
             onClick={() => setSidebarOpen(true)}
             className="lg:hidden"
@@ -187,7 +195,7 @@ export function AppLayout() {
         </header>
 
         {/* Page content */}
-        <main className="p-4 lg:p-6">
+        <main className="p-4 lg:p-6 print:p-0">
           <Outlet />
         </main>
       </div>

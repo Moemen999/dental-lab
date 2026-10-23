@@ -6,6 +6,15 @@ import {
   useUpdateDentist,
 } from '@/hooks/useSupabase';
 import { Button } from '@/components/ui/Button';
+import {
+  MobileList,
+  MobileListItem,
+  MobileItemHeader,
+  MobileFields,
+  MobileField,
+  MobileActions,
+  DesktopTable,
+} from '@/components/ui/ResponsiveList';
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -29,6 +38,35 @@ import { toast } from 'sonner';
 import { t } from '@/i18n';
 import { errorMessage } from '@/i18n/errors';
 import { usePageTitle } from '@/hooks/usePageTitle';
+
+/** Phone never wraps ("+971 4 000 2222" stays on one line); a long email may break anywhere. */
+function ContactLines({ d }: { d: Dentist }) {
+  return (
+    <div className="space-y-1 text-xs text-slate-600">
+      {d.phone && (
+        <div className="flex items-center gap-1.5">
+          <Phone className="h-3 w-3 shrink-0 text-slate-500" aria-hidden="true" />
+          <Ltr className="whitespace-nowrap">{d.phone}</Ltr>
+        </div>
+      )}
+      {d.email && (
+        <div className="flex min-w-0 items-center gap-1.5">
+          <Mail className="h-3 w-3 shrink-0 text-slate-500" aria-hidden="true" />
+          <Ltr className="min-w-0 break-all md:break-normal">{d.email}</Ltr>
+        </div>
+      )}
+      {!d.phone && !d.email && <span className="text-slate-500">—</span>}
+    </div>
+  );
+}
+
+function ActiveBadge({ d }: { d: Dentist }) {
+  return (
+    <Badge variant={d.is_active ? 'success' : 'secondary'}>
+      {d.is_active ? t('common.labels.active') : t('common.labels.inactive')}
+    </Badge>
+  );
+}
 
 export function DentistsPage() {
   usePageTitle(t('dentists.title'));
@@ -155,7 +193,7 @@ export function DentistsPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{t('dentists.title')}</h1>
+          <h1 id="dentists-title" className="text-2xl font-bold text-slate-900">{t('dentists.title')}</h1>
           <p className="text-sm text-slate-500">{t('dentists.subtitle')}</p>
         </div>
         {canManage && (
@@ -214,7 +252,44 @@ export function DentistsPage() {
               onAction={canManage ? openCreateModal : undefined}
             />
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            <MobileList aria-labelledby="dentists-title">
+              {filteredDentists.map((d) => (
+                <MobileListItem key={d.id}>
+                  <MobileItemHeader>
+                    <div className="flex min-w-0 items-center gap-2 font-semibold text-slate-900">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-teal-50 text-brand-teal">
+                        <Stethoscope className="h-4 w-4" aria-hidden="true" />
+                      </div>
+                      <AutoDir className="min-w-0 break-words">{d.name}</AutoDir>
+                    </div>
+                    <ActiveBadge d={d} />
+                  </MobileItemHeader>
+                  <MobileFields>
+                    <MobileField label={t('dentists.columns.clinic')}><AutoDir>{d.clinic_name || '—'}</AutoDir></MobileField>
+                    <MobileField label={t('dentists.columns.contact')}><ContactLines d={d} /></MobileField>
+                    <MobileField label={t('common.labels.address')} className="text-xs text-slate-600">
+                      {d.address ? <AutoDir>{d.address}</AutoDir> : '—'}
+                    </MobileField>
+                    <MobileField label={t('dentists.columns.addedOn')} className="whitespace-nowrap text-xs text-slate-500">
+                      {formatDate(d.created_at)}
+                    </MobileField>
+                  </MobileFields>
+                  {canManage && (
+                    <MobileActions>
+                      <Button variant="outline" onClick={() => openEditModal(d)}>
+                        <Edit2 className="h-4 w-4" aria-hidden="true" />
+                        {t('dentists.editDetails')}
+                      </Button>
+                      <Button variant="outline" onClick={() => handleToggleStatus(d)}>
+                        {d.is_active ? t('common.actions.deactivate') : t('common.actions.activate')}
+                      </Button>
+                    </MobileActions>
+                  )}
+                </MobileListItem>
+              ))}
+            </MobileList>
+            <DesktopTable>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -241,23 +316,7 @@ export function DentistsPage() {
                       <TableCell className="text-slate-700 font-medium">
                         <AutoDir>{d.clinic_name || '—'}</AutoDir>
                       </TableCell>
-                      <TableCell>
-                        <div className="space-y-1 text-xs text-slate-600">
-                          {d.phone && (
-                            <div className="flex items-center gap-1.5">
-                              <Phone className="h-3 w-3 text-slate-500" />
-                              <Ltr>{d.phone}</Ltr>
-                            </div>
-                          )}
-                          {d.email && (
-                            <div className="flex items-center gap-1.5">
-                              <Mail className="h-3 w-3 text-slate-500" />
-                              <Ltr>{d.email}</Ltr>
-                            </div>
-                          )}
-                          {!d.phone && !d.email && <span className="text-slate-500">—</span>}
-                        </div>
-                      </TableCell>
+                      <TableCell><ContactLines d={d} /></TableCell>
                       <TableCell className="text-xs text-slate-600 max-w-xs truncate">
                         {d.address ? (
                           <div className="flex items-center gap-1.5">
@@ -268,11 +327,7 @@ export function DentistsPage() {
                           '—'
                         )}
                       </TableCell>
-                      <TableCell>
-                        <Badge variant={d.is_active ? 'success' : 'secondary'}>
-                          {d.is_active ? t('common.labels.active') : t('common.labels.inactive')}
-                        </Badge>
-                      </TableCell>
+                      <TableCell><ActiveBadge d={d} /></TableCell>
                       <TableCell className="text-xs text-slate-500 whitespace-nowrap">
                         {formatDate(d.created_at)}
                       </TableCell>
@@ -303,7 +358,8 @@ export function DentistsPage() {
                   ))}
                 </TableBody>
               </Table>
-            </div>
+            </DesktopTable>
+            </>
           )}
         </CardContent>
       </Card>

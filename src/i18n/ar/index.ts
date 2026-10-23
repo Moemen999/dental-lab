@@ -9,6 +9,8 @@ import { dentists } from './dentists';
 import { employees } from './employees';
 import { audit } from './audit';
 import { workTypes } from './workTypes';
+import { lateCases } from './lateCases';
+import { money } from './money';
 
 /** The Arabic dictionary. Arabic is the only UI language. */
 export const ar = {
@@ -24,6 +26,8 @@ export const ar = {
   employees,
   audit,
   workTypes,
+  lateCases,
+  money,
 };
 
 export type Dictionary = typeof ar;

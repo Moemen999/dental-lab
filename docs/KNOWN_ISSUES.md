@@ -18,9 +18,9 @@ misleading behavior, **Low** = quality/performance.
 | 4 | ~~Medium~~ ✅ Fixed (007) | ~~`technician_assignments` accepts any `assigned_by` value from the client, and its rows are written in a separate request from the case update (not atomic).~~ | `useAssignTechnician`, `assignments_insert` policy |
 | 5 | ~~Medium~~ ✅ Fixed (008) | ~~Deactivating a technician **without** a replacement fails for cases in `in_progress`.~~ | `reassign_and_deactivate_technician` |
 | 6 | ~~Medium~~ ✅ Fixed (009) | ~~Registering a case does not write a `created` event or a `technician_assignments` row when a technician is chosen on the form.~~ | `CaseRegistrationPage`, insert trigger |
-| 7 | Low | The "Add Note" button is shown to representatives, but notes are denied for that role (matrix + `record_case_event`). They get an error toast. | `CaseDetailPage.tsx` |
+| 7 | ~~Low~~ ✅ Fixed (Step 0) | ~~The "Add Note" button is shown to representatives, but notes are denied for that role.~~ | `CaseDetailPage.tsx` |
 | 8 | ~~Low~~ ✅ Fixed (010) | ~~`batch_cases` rows can be added by representatives to any batch; `actual_count` is recalculated client-side with a read-then-write race.~~ | `useAddCaseToBatch` |
-| 9 | Low | Case numbers use the server month in UTC. Cases registered in Egypt between 00:00 and 02:00/03:00 local time on the 1st get the previous month's prefix. | `generate_case_number` |
+| 9 | ~~Low~~ ✅ Fixed (012) | ~~Case numbers use the server month in UTC; cases registered in Egypt just after midnight on the 1st get the previous month's prefix.~~ | `generate_case_number` |
 | 10 | Low (**known, accepted**) | Edge Function `manage-users` (invites, role/status changes, session revocation) has **no automated runtime tests**: Deno is not available locally and no Supabase test project is used. It has been reviewed by reading only and is **not verified** at runtime. The database functions it calls (`reassign_and_deactivate_technician`, `get_employee_outstanding_work`) are tested in `src/test/db/`. | `supabase/functions/manage-users` |
 
 ### Frontend
@@ -39,7 +39,6 @@ misleading behavior, **Low** = quality/performance.
 
 | # | Severity | Issue | Where |
 |---|---|---|---|
-| 16 | Low | The owner dashboard runs 17 sequential count queries every 30 seconds (one per status + overdue + total + employees). One grouped query or RPC would do. | `useDashboardStats` |
 | 17 | Low | `manualChunks` puts all app code into the `vendor` chunk because any path containing `react` matches. | `vite.config.ts` |
 
 ### Testing
@@ -47,6 +46,14 @@ misleading behavior, **Low** = quality/performance.
 | # | Severity | Issue | Where |
 |---|---|---|---|
 | 18 | Medium | The original 29 unit tests re-implement the rules inside the test files instead of testing real code; e.g. `permissions.test.ts` blocks receptionist transitions that the real trigger allows (see #2). The real-database tests in `src/test/db/` are the source of truth. | `src/test/*.test.ts` |
+
+### Backup
+
+| # | Severity | Issue | Where |
+|---|---|---|---|
+| 21 | High (**open**) | The database backup is **built and tested on fake data only, NOT installed on the lab PC**. Not verified: (a) a real connection to the Supabase Session pooler; (b) `pg_dump` 17 against the server's real PostgreSQL major version (pg_dump must be >= the server's major version); (c) Google login and `rclone config create` with the owner's own OAuth client; (d) the setup dialogs (Windows Forms, RTL) as the owner sees them; (e) the real scheduled task `DolphinLabBackup` (logon trigger, retries, 1 PM run); (f) a real restore into a new Supabase project (`pg_restore --data-only` after the migrations); (g) running under one fixed Windows user on the lab PC (DPAPI secret, folder ACL and task are tied to that user). PostgreSQL binaries come from EDB without any published checksum or signature (pinned hash only, see `install-tools.ps1`). | `scripts/backup/`, `docs/BACKUP_GUIDE_AR.md` |
+| 22 | ~~Medium~~ ✅ Fixed (Step 3) | ~~(1) An interrupted extraction left a half-installed tool that `Test-ToolsInstalled` (exe-only check) then skipped. (2) The zip-slip guard and the rclone `SHA256SUMS` parser had no offline unit tests. (3) The pgsql guard only blocked writes outside `tools`, not into another tool's folder.~~ | `scripts/backup/install-tools.ps1`, `common.ps1` |
+| 23 | Low | Review nits left after #22: (1) if moving the new tool folder in AND moving the old one back both fail, the next run deletes `.old-<name>` instead of restoring it (it reinstalls from the cached zip); (2) "back up now" says "a backup is running" when an install holds the lock, and setup shows "check the internet" before the busy reason; (3) `restore-backup.ps1` does not take the lock (safe today: an install cannot move an in-use folder). | `scripts/backup/` |
 
 ## Fixed
 
@@ -69,3 +76,7 @@ misleading behavior, **Low** = quality/performance.
 | #6 Registration wrote no history | `009_case_registration_history.sql`: `created` event + assignment row on INSERT |
 | #8 Representatives could add cases to any batch; client-side count | `010_batch_cases_scope.sql`: reps add only to their own open batches, `added_by` = caller, `actual_count` incremented by trigger |
 | #11 Search text pasted into the PostgREST filter | `011_search_cases.sql`: `search_cases(p_query)` (SECURITY INVOKER, literal `strpos` match); `useCases` sends the text as an RPC parameter |
+| #7 "Add Note" shown to representatives | `canAddCaseNote()` in `src/types/database.ts` hides it (same roles as `record_case_event`). Tests: `src/test/transitionsForRole.test.ts`, `src/test/db/openIssues.test.ts` |
+| #9 Case number month taken in UTC | `012_case_number_cairo_time.sql`: month from `private.case_number_month()` in `Africa/Cairo`; existing numbers untouched. Tests: `src/test/db/caseNumberTimezone.test.ts` |
+| #22 Half-installed backup tools taken as installed; zip guard and `SHA256SUMS` parser untested; pgsql guard rooted at `tools` | `Install-ToolPackage` (`common.ps1`) extracts each package into `tools\.staging-<name>` (files flushed to disk), checks the file count, writes a flushed `.installed` marker (verified SHA-256 + version) there last, renames the old `tools\<name>` to `.old-<name>` (kept as it was if that fails, e.g. a locked file) and moves staging into place with retries (old folder put back on failure); `Test-ToolsInstalled` requires the marker; leftovers (`.staging-*`, `.old-*`) are deleted and reinstalled on the next run. `install-tools.ps1` holds the backup lock `Local\DolphinLabBackup` (shared with `run-backup.ps1`), so two installs, or an install during a backup, cannot run together. `Export-ZipEntry` (guard rooted at the matched folder; absolute, UNC, drive-relative and `:` paths refused) and `Get-RcloneOfficialSha256` (takes the SUMS text, case-sensitive name) moved to `common.ps1`. Tests: `scripts/backup/tests/test-units.ps1` (zip entry guard, guard rooted at the matched folder, SHA256SUMS parser, install markers, interrupted install resumes, a package cannot overwrite another tool, files missing from staging, locked old/new folder, leftovers cleaned, install-tools arguments, shared lock incl. abandoned lock), `test-install-verify.ps1`, `test-end-to-end.ps1` |
+| #16 Owner dashboard ran 17 sequential count queries every 30 seconds | One RPC `get_owner_dashboard_stats()` (migration 015; owner only; overdue by Cairo date) used by `useDashboardStats`; tests in `src/test/db/pricing.test.ts` and `src/test/dashboardStatsHook.test.tsx` |

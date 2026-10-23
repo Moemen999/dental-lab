@@ -5,15 +5,17 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
-import { createTestDb, seedStaff, seedCase, seedBatch, seedWorkType, attempt, as, USERS } from './harness';
+import { createTestDb, seedStaff, seedCase, seedBatch, seedWorkType, appCaseJaw, attempt, as, USERS } from './harness';
 
 let db: PGlite;
+let jaw = { col: '', val: '' };
 
 beforeAll(async () => {
   db = await createTestDb();
   await seedStaff(db);
   // idleTech plays an inactive technician in this file.
   await db.query(`UPDATE profiles SET status = 'inactive' WHERE id = $1`, [USERS.idleTech]);
+  jaw = await appCaseJaw(db); // a jaw is required from migration 014
 }, 120_000);
 
 const assign = (uid: string, caseId: string, techId: string) =>
@@ -202,8 +204,8 @@ describe('Issue 5: deactivation without a replacement', () => {
 describe('Issue 6: registration history', () => {
   const register = (techId: string | null) =>
     attempt<{ id: string }>(db, as.user(USERS.receptionist),
-      `INSERT INTO cases (patient_name, case_type, assigned_technician_id)
-       VALUES ('Fake Patient R', 'Test Retainer', $1) RETURNING id`, [techId], { keep: true });
+      `INSERT INTO cases (patient_name, case_type, assigned_technician_id${jaw.col})
+       VALUES ('Fake Patient R', 'Test Retainer', $1${jaw.val}) RETURNING id`, [techId], { keep: true });
 
   beforeAll(async () => {
     await seedWorkType(db, 'Test Retainer');
@@ -344,5 +346,19 @@ describe('Issue 11: parameterized case search', () => {
   it('anonymous callers cannot search', async () => {
     const anon = await attempt(db, as.anon, `SELECT id FROM search_cases('Fake')`);
     expect(anon.ok && anon.rows.length > 0).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue 7: the UI hid nothing; the database already denies representative notes.
+// This pins the server rule that canAddCaseNote() mirrors.
+// ---------------------------------------------------------------------------
+describe('Issue 7: representatives cannot add case notes', () => {
+  it('rejects a note from a representative', async () => {
+    const id = await seedCase(db, { status: 'with_representative' });
+    const r = await attempt(db, as.user(USERS.rep),
+      `SELECT record_case_event($1, 'note_added', NULL, NULL, 'Fake note') AS id`, [id]);
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/Not permitted to add case notes/);
   });
 });

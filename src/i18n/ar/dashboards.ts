@@ -120,7 +120,6 @@ export const dashboards = {
       contact: 'عنوان / هاتف العيادة',
       destinationDentist: 'الطبيب المرسل إليه',
     },
-    clinicWithDentist: '{clinic} ({dentist})',
     markDelivered: 'تأكيد التسليم',
     pickUp: 'استلام من المعمل',
     dialog: {

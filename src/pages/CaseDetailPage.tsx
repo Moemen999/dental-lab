@@ -9,13 +9,13 @@ import {
   useCreateCaseEvent,
   useTechnicians,
 } from '@/hooks/useSupabase';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonVariants } from '@/components/ui/Button';
 import { Textarea } from '@/components/ui/Textarea';
 import { Select } from '@/components/ui/Select';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Spinner } from '@/components/ui/Spinner';
-import { AutoDir, CaseNumber, Ltr } from '@/components/ui/Bidi';
+import { AutoDir, CaseNumber } from '@/components/ui/Bidi';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/Dialog';
 import {
   CASE_STATUS_LABELS,
@@ -23,10 +23,13 @@ import {
   PRIORITY_COLORS,
   EVENT_TYPE_LABELS,
   transitionsForRole,
+  canAddCaseNote,
   caseTypeLabel,
-  shadeLabel,
+  jawLabel,
   type CaseStatus,
 } from '@/types/database';
+import { LegacySpecsSection } from '@/components/CaseJawSpecs';
+import { CaseAccountCard } from '@/components/money/CaseAccountCard';
 import { formatDate, formatRelativeTime, isOverdue } from '@/lib/utils';
 import {
   ArrowLeft,
@@ -90,11 +93,9 @@ export function CaseDetailPage() {
       <div className="text-center py-16 space-y-4">
         <h2 className="text-xl font-bold text-slate-800">{t('cases.detail.notFound.title')}</h2>
         <p className="text-slate-500">{t('cases.detail.notFound.description')}</p>
-        <Link to="/cases">
-          <Button variant="outline">
-            <ArrowLeft className="h-4 w-4 me-2 rtl:-scale-x-100" />
-            {t('cases.detail.notFound.back')}
-          </Button>
+        <Link to="/cases" className={buttonVariants({ variant: 'outline' })}>
+          <ArrowLeft className="h-4 w-4 me-2 rtl:-scale-x-100" aria-hidden="true" />
+          {t('cases.detail.notFound.back')}
         </Link>
       </div>
     );
@@ -103,6 +104,7 @@ export function CaseDetailPage() {
   const validTransitions = transitionsForRole(profile?.role, currentCase.current_status);
   const overdue = isOverdue(currentCase.due_date, currentCase.current_status);
   const canAssign = profile?.role === 'owner' || profile?.role === 'receptionist';
+  const canAddNote = canAddCaseNote(profile?.role);
 
   const handleStatusTransition = async () => {
     if (!targetStatus || !id) return;
@@ -184,7 +186,7 @@ export function CaseDetailPage() {
           </Button>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-bold text-slate-900">
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
                 <CaseNumber value={currentCase.case_number} />
               </h1>
               <StatusBadge status={currentCase.current_status} />
@@ -210,14 +212,16 @@ export function CaseDetailPage() {
 
         {/* Action button toolbar */}
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setNoteOpen(true)}
-          >
-            <MessageSquare className="h-4 w-4 me-1" />
-            {t('cases.detail.addNote')}
-          </Button>
+          {canAddNote && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setNoteOpen(true)}
+            >
+              <MessageSquare className="h-4 w-4 me-1" />
+              {t('cases.detail.addNote')}
+            </Button>
+          )}
           {canAssign && (
             <Button
               variant="outline"
@@ -302,7 +306,7 @@ export function CaseDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
                   <span className="text-xs text-slate-500 block font-medium">{t('cases.detail.specs.caseType')}</span>
                   <span className="text-base font-semibold text-slate-900">
@@ -310,18 +314,14 @@ export function CaseDetailPage() {
                   </span>
                 </div>
                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                  <span className="text-xs text-slate-500 block font-medium">{t('cases.detail.specs.toothNumber')}</span>
+                  <span className="text-xs text-slate-500 block font-medium">{t('cases.detail.specs.jaw')}</span>
                   <span className="text-base font-semibold text-slate-900">
-                    {currentCase.tooth_number ? <Ltr>{currentCase.tooth_number}</Ltr> : t('cases.detail.specs.notApplicable')}
-                  </span>
-                </div>
-                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                  <span className="text-xs text-slate-500 block font-medium">{t('cases.detail.specs.shade')}</span>
-                  <span className="text-base font-semibold text-slate-900">
-                    {currentCase.shade ? <Ltr>{shadeLabel(currentCase.shade)}</Ltr> : t('cases.detail.specs.notSpecified')}
+                    {jawLabel(currentCase.upper_jaw, currentCase.lower_jaw) ?? t('cases.detail.specs.notSpecified')}
                   </span>
                 </div>
               </div>
+
+              <LegacySpecsSection value={currentCase} />
 
               {currentCase.description && (
                 <div>
@@ -361,6 +361,9 @@ export function CaseDetailPage() {
 
         {/* Status Transition Actions & Timeline (1 col) */}
         <div className="space-y-6">
+          {/* Price and payments (owner + receptionist only; renders nothing for others) */}
+          <CaseAccountCard caseData={currentCase} />
+
           {/* Workflow Action Panel */}
           <Card>
             <CardHeader>

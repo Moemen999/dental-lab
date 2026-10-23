@@ -8,7 +8,9 @@
  * ?fail=1 makes status changes fail with a database error, to preview error messages.
  */
 import { VALID_TRANSITIONS, type CaseStatus } from '@/types/database';
+import { cairoToday } from '@/lib/whatsapp';
 import { AUDIT_LOGS, BATCHES, BATCH_CASES, CASES, DENTISTS, EVENTS, PROFILES, WORK_TYPES } from './fixtures';
+import { MONEY_TABLES, canReadMoney, checkMoneyWrite, moneyRpc, snapshotCharge } from './money';
 
 type Row = Record<string, unknown>;
 type Result = { data: unknown; error: unknown; count?: number | null };
@@ -38,7 +40,21 @@ const TABLES: Record<string, Row[]> = {
   audit_logs: AUDIT_LOGS as unknown as Row[],
   technician_assignments: [],
   work_types: WORK_TYPES as unknown as Row[],
+  ...MONEY_TABLES,
 };
+
+/** Primary key of the money tables (for upsert / delete). */
+const MONEY_KEYS: Record<string, string> = {
+  price_list: 'work_type_id',
+  dentist_discounts: 'dentist_id',
+  dentist_opening_balances: 'dentist_id',
+  case_charges: 'case_id',
+  payments: 'id',
+};
+
+function currentRole() {
+  return PROFILES.find((p) => p.id === currentUserId())?.role;
+}
 
 function decorate(table: string, row: Row): Row {
   if (table === 'cases') {
@@ -54,7 +70,7 @@ function decorate(table: string, row: Row): Row {
 
 class Query implements PromiseLike<Result> {
   private filters: Array<(r: Row) => boolean> = [];
-  private op: 'select' | 'insert' | 'update' = 'select';
+  private op: 'select' | 'insert' | 'update' | 'upsert' | 'delete' = 'select';
   private payload: Row = {};
   private wantSingle = false;
   private head = false;
@@ -82,8 +98,14 @@ class Query implements PromiseLike<Result> {
     this.payload = payload;
     return this;
   }
-  upsert(payload: Row) {
-    return this.insert(payload);
+  upsert(payload: Row, _opts?: { onConflict?: string }) {
+    this.op = MONEY_KEYS[this.table] ? 'upsert' : 'insert';
+    this.payload = payload;
+    return this;
+  }
+  delete() {
+    this.op = 'delete';
+    return this;
   }
   eq(col: string, val: unknown) {
     this.filters.push((r) => r[col] === val);
@@ -97,9 +119,12 @@ class Query implements PromiseLike<Result> {
     this.filters.push((r) => r[col] !== null && String(r[col]) < String(val));
     return this;
   }
-  not(col: string, op: string, val: string) {
+  not(col: string, op: string, val: string | null) {
+    if (op === 'is' && val === null) {
+      this.filters.push((r) => r[col] !== null && r[col] !== undefined);
+    }
     if (op === 'in') {
-      const values = val.replace(/[()"]/g, '').split(',');
+      const values = String(val).replace(/[()"]/g, '').split(',');
       this.filters.push((r) => !values.includes(String(r[col])));
     }
     return this;
@@ -129,8 +154,39 @@ class Query implements PromiseLike<Result> {
     return this;
   }
 
+  /** Money tables: same role rules as RLS; writes go through checkMoneyWrite. */
+  private runMoney(rows: Row[]): Result | null {
+    const role = currentRole();
+    if (this.op === 'select') return canReadMoney(role) ? null : { data: [], error: null, count: 0 };
+    const key = MONEY_KEYS[this.table];
+    const matched = rows.filter((r) => this.filters.every((f) => f(r)));
+    const payload = { ...this.payload };
+    if (this.table === 'case_charges' && this.op === 'update') payload.case_id = matched[0]?.case_id;
+    const e = checkMoneyWrite(this.table, this.op, role, payload, currentUserId());
+    if (e) return { data: null, error: e };
+    if (this.op === 'delete') {
+      const keep = rows.filter((r) => !matched.includes(r));
+      rows.splice(0, rows.length, ...keep);
+      return { data: null, error: null };
+    }
+    const existing = this.op === 'update' ? matched : rows.filter((r) => r[key] === payload[key]);
+    if (this.op !== 'insert' && existing.length > 0) {
+      existing.forEach((r) => Object.assign(r, payload));
+      return { data: existing, error: null };
+    }
+    if (this.op === 'update') return { data: [], error: null };
+    const row: Row = { id: `new-${Date.now()}`, ...payload };
+    if (key !== 'id') delete row.id;
+    rows.unshift(row);
+    return { data: row, error: null };
+  }
+
   private run(): Result {
     const rows = TABLES[this.table] ?? [];
+    if (MONEY_KEYS[this.table]) {
+      const money = this.runMoney(rows);
+      if (money) return money;
+    }
     if (this.table === 'work_types' && 'name' in this.payload) {
       const name = String(this.payload.name ?? '').trim();
       const ownId = this.op === 'update' ? rows.find((r) => this.filters.every((f) => f(r)))?.id : undefined;
@@ -140,6 +196,10 @@ class Query implements PromiseLike<Result> {
       }
       this.payload = { ...this.payload, name };
     }
+    if (this.op === 'insert' && this.table === 'cases' && this.payload.upper_jaw !== true && this.payload.lower_jaw !== true) {
+      // Same rule as migration 014: a case registered from the app needs a jaw.
+      return { data: null, error: dbError('err.case.jaw_required', 'At least one jaw (upper or lower) is required') };
+    }
     if (this.op === 'insert') {
       const row: Row = { id: `new-${Date.now()}`, created_at: new Date().toISOString(), is_active: true, ...this.payload };
       if (this.table === 'cases') {
@@ -147,6 +207,7 @@ class Query implements PromiseLike<Result> {
         row.current_status = row.assigned_technician_id ? 'assigned' : 'awaiting_assignment';
       }
       rows.unshift(row);
+      if (this.table === 'cases') snapshotCharge(String(row.id), String(row.case_type ?? ''), (row.dentist_id as string | null) ?? null);
       return { data: decorate(this.table, row), error: null };
     }
     let matched = rows.filter((r) => this.filters.every((f) => f(r)));
@@ -231,6 +292,8 @@ export const supabase = {
 
 async function callRpc(name: string, args: Record<string, unknown>) {
     await new Promise((r) => setTimeout(r, 150));
+    const money = moneyRpc(name, args, currentRole());
+    if (money) return money;
     if (name === 'transition_case_status') {
       const c = CASES.find((x) => x.id === args.p_case_id);
       if (!c) return { data: null, error: dbError('err.case.not_found', 'Case not found or not permitted') };
@@ -256,6 +319,28 @@ async function callRpc(name: string, args: Record<string, unknown>) {
         data: { user_id: args.p_user_id, role: 'technician', active_case_count: active.length, active_cases: active, open_batch_count: 0, open_batches: [] },
         error: null,
       };
+    }
+    if (name === 'get_late_cases' || name === 'get_late_case_counts') {
+      // Same rules as migration 013: owner + receptionist only, Cairo date.
+      const role = PROFILES.find((p) => p.id === currentUserId())?.role;
+      if (role !== 'owner' && role !== 'receptionist') {
+        return { data: null, error: dbError('err.auth.forbidden', 'Not permitted to view late cases') };
+      }
+      const today = cairoToday();
+      const rows = CASES.filter((c) => c.due_date && c.due_date <= today && !['delivered', 'cancelled'].includes(c.current_status))
+        .sort((a, b) => (a.due_date! < b.due_date! ? -1 : a.due_date! > b.due_date! ? 1 : a.case_number.localeCompare(b.case_number)))
+        .map((c) => {
+          const d = DENTISTS.find((x) => x.id === c.dentist_id);
+          return {
+            id: c.id, case_number: c.case_number, patient_name: c.patient_name, due_date: c.due_date!,
+            current_status: c.current_status,
+            technician_name: PROFILES.find((p) => p.id === c.assigned_technician_id)?.full_name ?? null,
+            dentist_name: d?.name ?? c.dentist_name_text ?? null, dentist_phone: d?.phone ?? null,
+            bucket: c.due_date! < today ? 'late' : 'today',
+          };
+        });
+      if (name === 'get_late_cases') return { data: rows, error: null };
+      return { data: [{ late_count: rows.filter((r) => r.bucket === 'late').length, today_count: rows.filter((r) => r.bucket === 'today').length }], error: null };
     }
     if (name === 'reassign_and_deactivate_technician') return { data: { success: true }, error: null };
     return { data: null, error: { code: '42883', message: `function ${name} does not exist` } };

@@ -31,6 +31,8 @@ describe('Delivery Batches & Case Handoff Integrity', () => {
         dentist_name_text: null,
         clinic_name_text: 'Downtown Dental',
         case_type: 'Crown',
+        upper_jaw: null, // registered before migration 014
+        lower_jaw: null,
         tooth_number: '14',
         shade: 'A2',
         description: 'Porcelain fused to zirconia',
@@ -60,6 +62,8 @@ describe('Delivery Batches & Case Handoff Integrity', () => {
         dentist_name_text: null,
         clinic_name_text: 'Westside Ortho',
         case_type: 'Night Guard',
+        upper_jaw: true,
+        lower_jaw: true,
         tooth_number: null,
         shade: null,
         description: 'Upper hard/soft night guard',
@@ -89,6 +93,8 @@ describe('Delivery Batches & Case Handoff Integrity', () => {
         dentist_name_text: null,
         clinic_name_text: 'Downtown Dental',
         case_type: 'Bridge',
+        upper_jaw: null, // registered before migration 014
+        lower_jaw: null,
         tooth_number: '21-23',
         shade: 'A3',
         description: '3-unit anterior bridge',

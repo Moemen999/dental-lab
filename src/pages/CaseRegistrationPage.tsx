@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCreateCase } from '@/hooks/useSupabase';
@@ -8,8 +8,9 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Textarea } from '@/components/ui/Textarea';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/Card';
-import { SHADE_OPTIONS, PRIORITY_LABELS, shadeLabel } from '@/types/database';
-import type { CasePriority } from '@/types/database';
+import { PRIORITY_LABELS } from '@/types/database';
+import type { CaseInsert, CasePriority } from '@/types/database';
+import { cn } from '@/lib/utils';
 import { ArrowLeft, Plus, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { t } from '@/i18n';
@@ -41,8 +42,10 @@ export function CaseRegistrationPage() {
   const [dentistId, setDentistId] = useState('');
   const [dentistNameText, setDentistNameText] = useState('');
   const [caseType, setCaseType] = useState('');
-  const [toothNumber, setToothNumber] = useState('');
-  const [shade, setShade] = useState('');
+  // Migration 014: upper / lower jaw replace shade and tooth number (at least one is required).
+  const [upperJaw, setUpperJaw] = useState(false);
+  const [lowerJaw, setLowerJaw] = useState(false);
+  const jawId = useId();
   const [description, setDescription] = useState('');
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [priority, setPriority] = useState<CasePriority>('normal');
@@ -52,12 +55,24 @@ export function CaseRegistrationPage() {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const toggleJaw = (setJaw: (checked: boolean) => void, checked: boolean) => {
+    setJaw(checked);
+    if (checked) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.jaw;
+        return next;
+      });
+    }
+  };
+
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
 
     if (!patientName.trim()) newErrors.patientName = t('cases.register.validation.patientRequired');
     if (patientName.length > 300) newErrors.patientName = t('cases.register.validation.patientTooLong');
     if (!caseType) newErrors.caseType = t('cases.register.validation.caseTypeRequired');
+    if (!upperJaw && !lowerJaw) newErrors.jaw = t('cases.register.validation.jawRequired');
     if (!dentistId && !dentistNameText.trim()) {
       newErrors.dentist = t('cases.register.validation.dentistRequired');
     }
@@ -76,17 +91,17 @@ export function CaseRegistrationPage() {
 
     try {
       // case_number, current_status, registered_by and assigned_at are set by the database
-      const caseData: Record<string, unknown> = {
+      const caseData: CaseInsert = {
         patient_name: patientName.trim(),
         case_type: caseType,
         priority,
+        upper_jaw: upperJaw,
+        lower_jaw: lowerJaw,
       };
 
       if (patientAge) caseData.patient_age = Number(patientAge);
       if (dentistId) caseData.dentist_id = dentistId;
       if (dentistNameText.trim()) caseData.dentist_name_text = dentistNameText.trim();
-      if (toothNumber.trim()) caseData.tooth_number = toothNumber.trim();
-      if (shade) caseData.shade = shade;
       if (description.trim()) caseData.description = description.trim();
       if (specialInstructions.trim()) caseData.special_instructions = specialInstructions.trim();
       if (dueDate) caseData.due_date = dueDate;
@@ -287,25 +302,48 @@ export function CaseRegistrationPage() {
                   ))}
                 </Select>
 
-                <Input
-                  label={t('cases.register.details.toothNumber')}
-                  value={toothNumber}
-                  onChange={(e) => setToothNumber(e.target.value)}
-                  placeholder={t('cases.register.details.toothPlaceholder')}
-                  dir="ltr"
-                  className="text-end"
-                />
-
-                <Select
-                  label={t('cases.register.details.shade')}
-                  value={shade}
-                  onChange={(e) => setShade(e.target.value)}
+                <fieldset
+                  className="space-y-1.5"
+                  aria-describedby={errors.jaw ? `${jawId}-error` : `${jawId}-hint`}
                 >
-                  <option value="">{t('cases.register.details.selectShade')}</option>
-                  {SHADE_OPTIONS.map((s) => (
-                    <option key={s} value={s}>{shadeLabel(s)}</option>
-                  ))}
-                </Select>
+                  <legend className="block text-sm font-medium text-[var(--foreground)]">
+                    {t('cases.register.jaw.legend')}
+                  </legend>
+                  <div className="flex flex-wrap gap-3">
+                    {([
+                      ['upper', upperJaw, setUpperJaw, t('cases.register.jaw.upper')],
+                      ['lower', lowerJaw, setLowerJaw, t('cases.register.jaw.lower')],
+                    ] as const).map(([key, checked, setJaw, label]) => (
+                      <label
+                        key={key}
+                        className={cn(
+                          'flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm',
+                          'has-checked:border-brand-teal has-checked:bg-brand-teal-50',
+                          errors.jaw ? 'border-red-500' : 'border-[var(--input)]',
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          name={`${key}_jaw`}
+                          checked={checked}
+                          onChange={(e) => toggleJaw(setJaw, e.target.checked)}
+                          aria-invalid={!!errors.jaw}
+                          className="h-4 w-4 accent-brand-teal focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]"
+                        />
+                        <span>{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {errors.jaw ? (
+                    <p id={`${jawId}-error`} role="alert" className="text-sm text-red-700">
+                      {errors.jaw}
+                    </p>
+                  ) : (
+                    <p id={`${jawId}-hint`} className="text-sm text-[var(--muted-foreground)]">
+                      {t('cases.register.jaw.hint')}
+                    </p>
+                  )}
+                </fieldset>
 
                 <Select
                   label={t('cases.register.details.priority')}

@@ -88,6 +88,11 @@ npm run build
 # Preview production build locally
 npm run preview
 
+# Automatic encrypted backup to Google Drive (lab PC, owner guide: docs/BACKUP_GUIDE_AR.md)
+# Setup (owner, once): scripts\backup\setup-backup.cmd
+# Private files live in %LOCALAPPDATA%\DolphinBackup (never in the repo); age private key stays with the owner.
+npm.cmd run test:backup     # unit + end-to-end test on a temporary local PostgreSQL with fake data
+
 # Database manual backups (free tier off-site recovery)
 # Windows PowerShell:
 .\scripts\backup.ps1 -DatabaseUrl "postgresql://postgres:[PASSWORD]@[HOST]:5432/postgres"
@@ -161,7 +166,7 @@ dental_case_management_system/
 │   │       ├── Badge.tsx            # Variant badge component
 │   │       ├── Button.tsx           # Button with variants, sizes, and loading spinner
 │   │       ├── Card.tsx             # Card, CardHeader, CardTitle, CardContent
-│   │       ├── Dialog.tsx           # Accessible modal dialog with focus lock & backdrop
+│   │       ├── Dialog.tsx           # Accessible modal dialog: focus moves in, Tab trapped, Escape closes, focus restored
 │   │       ├── EmptyState.tsx       # Placeholder card for empty datasets
 │   │       ├── Input.tsx            # Form text input with label and error state
 │   │       ├── Pagination.tsx       # Pagination navigation controls
@@ -195,7 +200,7 @@ dental_case_management_system/
 │   │   ├── EmployeesPage.tsx        # Staff administration, invite modal, deactivation reassignment
 │   │   └── AuditLogsPage.tsx        # Administrative security audit trail
 │   │
-│   ├── test/                        # Vitest automated test suites (29 passing)
+│   ├── test/                        # Vitest suites (616 passing; src/test/db = real migrations on PGlite)
 │   │   ├── setup.ts                 # Test setup importing `@testing-library/jest-dom`
 │   │   ├── caseNumber.test.ts       # Monthly counter format, rollover, >99k scaling, concurrency
 │   │   ├── stateMachine.test.ts     # State progression, terminal states, hold & rework paths
@@ -259,6 +264,12 @@ To set up the database in Supabase (or a clean PostgreSQL instance):
    - `009`: case INSERT writes a `created` event and the assignment row.
    - `010` (#8): representatives add cases only to their own open batches; `added_by` and `actual_count` are set by the database.
    - `011` (#11): case search goes through `search_cases(p_query)` (parameter, literal match, RLS applies). Never build PostgREST `.or()` filters from user text.
+   - `012` (#9): case numbers use the Africa/Cairo month (`private.case_number_month`). Existing numbers are not changed.
+   - `013`: late / due-today cases via `get_late_cases()` and `get_late_case_counts()` (owner + receptionist only, Africa/Cairo date via `private.cairo_date`). Page `/late-cases` "المتأخرات" with wa.me links (`src/lib/whatsapp.ts`); nothing is sent automatically.
+   - `014`: `cases.upper_jaw` / `lower_jaw` (boolean). Trigger `trg_validate_case_jaws` requires at least one on every app INSERT and whenever a jaw changes; old rows (both NULL) stay editable. `shade` / `tooth_number` are kept untouched and shown read-only as old data.
+   - `015`: money module (owner + receptionist only; invisible to technician, representative, anon and inactive users): `price_list`, `dentist_discounts`, `case_charges` (auto price snapshot per case, owner-only manual edit, counts only when delivered), append-only `payments` (corrections = one reversal of exactly minus the original), optional owner-set `dentist_opening_balances`; RPCs `get_dentist_statement`, `get_dentist_balances`, `get_case_balance`, `get_owner_dashboard_stats` (one call for the owner dashboard, KNOWN_ISSUES #16). Old delivered cases are never auto-charged.
+   - `016`: an opening balance cannot be 0 or dated after today (Cairo). `017`: statement lines carry `is_reversed`.
+   - Money pages: `/pricing` "الأسعار" (owner), `/accounts` "الحسابات" and `/accounts/:dentistId` statement with print view (owner + receptionist); case page "الحساب" card. Amounts are numeric in the DB and shown with `formatMoney()`; the browser never does money arithmetic. Payment ids are generated in the dialog so a double submit cannot create two payments.
 
 7. **Optional Demo Seed**: `scripts/seed_demo_data.sql`
    - Inserts realistic clinics (Apex Dental Arts, Metropolitan Smiles, etc.) and sample cases in various workflow states for immediate testing.
@@ -350,11 +361,12 @@ To set up the database in Supabase (or a clean PostgreSQL instance):
 - [x] Row Level Security (RLS) configured on every table with least-privilege grants.
 - [x] Append-only operational event log (`case_events`) and administrative audit log (`audit_logs`).
 - [x] Role-adaptive navigation and dashboards for Owner, Receptionist, Technician, and Representative.
-- [x] Case registration form with doctor selection, clinical specs (teeth, shade, due date), and validation.
+- [x] Case registration form with doctor selection, clinical specs (upper/lower jaw, due date; shade and tooth number kept read-only as old data since 014), and validation.
 - [x] Interactive case detail page with clinical timeline and dynamic valid status transition controls.
+- [x] Phone layout: every list page shows a card list below `md` (`src/components/ui/ResponsiveList.tsx`, 44px actions, `role="list"`), tables from `md` up.
 - [x] Delivery batch creation (intake & return) with box count discrepancy tracking.
 - [x] Staff management page with employee invite modal, role assignment, and active cases inspection before deactivation.
-- [x] 29 automated tests passing across 6 test suites with Vitest.
+- [x] 616 automated tests passing (34 files), incl. 290 real-database tests in `src/test/db` on PGlite; backup scripts: `npm.cmd run test:backup`.
 - [x] Clean production build with zero TypeScript or Vite errors (558 KB total bundle).
 - [x] Full project documentation in `docs/` and standalone PDF handover document.
 - [x] Offline database backup scripts in PowerShell (`scripts/backup.ps1`) and Bash (`scripts/backup.sh`).
@@ -378,8 +390,8 @@ Before moving to production or extending features, verify the following items:
 4. **Localization & RTL**:
    - Done: full Arabic RTL UI (see coding conventions). Medical/lab terms are pending review by the lab owner.
 5. **Missing Features to Implement**:
-   - **Invoicing and billing**: Price lists, clinic balances, and payment tracking.
-   - **Late-case alerts and notifications**: Automated alerts for overdue or stalled cases.
+   - ~~**Invoicing and billing**~~: done in 015-017 (prices, discounts, payments, statements, opening balances). No VAT / e-invoicing (owner decision).
+   - ~~**Late-case alerts**~~: done in 013 (page "المتأخرات", dashboard count, wa.me links). Automatic sending is intentionally not done (no paid API).
    - **QR or barcode tracking**: Barcode generation and scanning for physical case boxes and job cards.
    - **QC checklists**: Multi-point inspection checklists before packaging and release.
    - **Lab performance reports**: Technician productivity, turnaround times, and remake rate analytics.

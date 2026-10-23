@@ -13,10 +13,10 @@ export function Ltr({ children, className }: { children: ReactNode; className?: 
   );
 }
 
-/** A case number, always LTR and monospaced. */
+/** A case number, always LTR, monospaced and on one line (never split at the hyphen). */
 export function CaseNumber({ value, className }: { value: string | null | undefined; className?: string }) {
   return (
-    <bdi dir="ltr" className={cn('font-mono', className)}>
+    <bdi dir="ltr" className={cn('font-mono whitespace-nowrap', className)}>
       {value ?? '—'}
     </bdi>
   );

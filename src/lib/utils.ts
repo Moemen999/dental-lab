@@ -98,3 +98,15 @@ export function isOverdue(dueDate: string | null | undefined, status: string): b
   now.setHours(0, 0, 0, 0);
   return due < now;
 }
+
+const cairoDateFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Africa/Cairo',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+/** Today's date in Africa/Cairo as 'YYYY-MM-DD'. */
+export function cairoToday(now: Date = new Date()): string {
+  return cairoDateFormatter.format(now);
+}

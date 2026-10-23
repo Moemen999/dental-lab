@@ -82,8 +82,10 @@ const caseRow = (
     dentist_name_text: null,
     clinic_name_text: null,
     case_type: 'Crown',
-    tooth_number: '11',
-    shade: 'A2',
+    upper_jaw: true,
+    lower_jaw: false,
+    tooth_number: null,
+    shade: null,
     description: null,
     special_instructions: null,
     current_status: status,
@@ -107,29 +109,38 @@ const caseRow = (
   } as Case;
 };
 
+/** A case registered before migration 014: shade / tooth number, no jaw (shown as old data). */
+const legacy = (tooth_number: string | null, shade: string | null): Partial<Case> => ({
+  upper_jaw: null,
+  lower_jaw: null,
+  tooth_number,
+  shade,
+});
+const BOTH_JAWS: Partial<Case> = { upper_jaw: true, lower_jaw: true };
+const LOWER_JAW: Partial<Case> = { upper_jaw: false, lower_jaw: true };
+
 export const CASES: Case[] = [
-  caseRow('awaiting_assignment', 'محمد عبد الرحمن', 'd1', null, { case_type: 'Bridge', tooth_number: '21-23', shade: 'A3', priority: 'high' }),
-  caseRow('awaiting_assignment', 'John Miller', 'd2', null, { case_type: 'Veneer', tooth_number: '11, 12, 21, 22', shade: 'BL2' }),
-  caseRow('assigned', 'فاطمة الزهراء علي', 'd1', 'u-tech1', { case_type: 'Implant Crown', tooth_number: '36' }),
+  caseRow('awaiting_assignment', 'محمد عبد الرحمن', 'd1', null, { case_type: 'Bridge', ...legacy('21-23', 'A3'), priority: 'high' }),
+  caseRow('awaiting_assignment', 'John Miller', 'd2', null, { case_type: 'Veneer', ...BOTH_JAWS }),
+  caseRow('assigned', 'فاطمة الزهراء علي', 'd1', 'u-tech1', { case_type: 'Implant Crown', ...LOWER_JAW, due_date: dateOnly(-1) }),
   caseRow('in_progress', 'Layla Hassan', 'd2', 'u-tech1', {
     case_type: 'Denture - Partial',
-    tooth_number: null,
-    shade: 'Custom',
+    ...legacy(null, 'Custom'),
     priority: 'urgent',
     due_date: dateOnly(-2),
     special_instructions: 'استخدم لون A2 في الثلث العنقي و A1 في الحافة القاطعة. Margin: chamfer 0.5mm.',
     description: 'طقم جزئي علوي — Cr-Co framework',
   }),
-  caseRow('in_progress', 'يوسف إبراهيم', 'd3', 'u-tech2', { case_type: 'Night Guard', tooth_number: null, shade: null }),
-  caseRow('on_hold', 'سلمى خالد', 'd1', 'u-tech1', { case_type: 'Post and Core', tooth_number: '45' }),
-  caseRow('completed', 'Ahmed Saeed', 'd2', 'u-tech2', { case_type: 'Crown', tooth_number: '16' }),
-  caseRow('awaiting_reception_receipt', 'نور الهدى', 'd1', 'u-tech1', { case_type: 'Maryland Bridge', tooth_number: '12-22' }),
-  caseRow('received_by_reception', 'عمرو دياب', 'd3', 'u-tech2', { case_type: 'Inlay', tooth_number: '26' }),
-  caseRow('awaiting_representative_pickup', 'Mariam Fathy', 'd2', 'u-tech1', { case_type: 'Onlay', tooth_number: '37' }),
-  caseRow('with_representative', 'حسن مصطفى', 'd1', 'u-tech2', { case_type: 'Crown', tooth_number: '14' }),
-  caseRow('delivered', 'رنا وليد', 'd1', 'u-tech1', { case_type: 'Retainer', tooth_number: null, delivered_at: daysAgo(1) }),
-  caseRow('rework_required', 'Tarek Nabil', 'd2', 'u-tech2', { case_type: 'Bridge', tooth_number: '44-46', priority: 'high' }),
-  caseRow('cancelled', 'هبة سمير', 'd3', null, { case_type: 'Other', tooth_number: null, priority: 'low' }),
+  caseRow('in_progress', 'يوسف إبراهيم', 'd3', 'u-tech2', { case_type: 'Night Guard', ...BOTH_JAWS, due_date: dateOnly(0) }),
+  caseRow('on_hold', 'سلمى خالد', 'd1', 'u-tech1', { case_type: 'Post and Core', ...legacy('45', null) }),
+  caseRow('completed', 'Ahmed Saeed', 'd2', 'u-tech2', { case_type: 'Crown' }),
+  caseRow('awaiting_reception_receipt', 'نور الهدى', 'd1', 'u-tech1', { case_type: 'Maryland Bridge', ...BOTH_JAWS }),
+  caseRow('received_by_reception', 'عمرو دياب', 'd3', 'u-tech2', { case_type: 'Inlay', ...LOWER_JAW }),
+  caseRow('awaiting_representative_pickup', 'Mariam Fathy', 'd2', 'u-tech1', { case_type: 'Onlay' }),
+  caseRow('with_representative', 'حسن مصطفى', 'd1', 'u-tech2', { case_type: 'Crown', ...legacy('14', 'A2') }),
+  caseRow('delivered', 'رنا وليد', 'd1', 'u-tech1', { case_type: 'Retainer', ...BOTH_JAWS, delivered_at: daysAgo(1), due_date: dateOnly(-3) }),
+  caseRow('rework_required', 'Tarek Nabil', 'd2', 'u-tech2', { case_type: 'Bridge', ...LOWER_JAW, priority: 'high' }),
+  caseRow('cancelled', 'هبة سمير', 'd3', null, { case_type: 'Other', priority: 'low' }),
   caseRow('registered', 'Khaled Youssef', null, null, { dentist_name_text: 'د. إيهاب (عيادة خارجية)', case_type: 'Temporary Crown' }),
 ];
 
@@ -151,7 +162,11 @@ export const BATCHES: DeliveryBatch[] = [
 })) as DeliveryBatch[];
 
 /** Starts EMPTY on purpose: the lab owner enters the real work types (أنواع الشغل). */
-export const WORK_TYPES: WorkType[] = [];
+// Placeholder names only: the real orthodontic work types are entered by the owner.
+export const WORK_TYPES: WorkType[] = [
+  { id: 'wt1', name: 'نوع شغل تجريبي (أ)', is_active: true, sort_order: 1, created_at: daysAgo(30) },
+  { id: 'wt2', name: 'نوع شغل تجريبي (ب)', is_active: true, sort_order: 2, created_at: daysAgo(30) },
+];
 
 export const BATCH_CASES = [
   { id: 'bc1', batch_id: 'b1', case_id: 'c1', added_at: daysAgo(1), added_by: 'u-recep' },

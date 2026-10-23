@@ -3,7 +3,16 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCases, useUpdateCaseStatus, useBatches } from '@/hooks/useSupabase';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonVariants } from '@/components/ui/Button';
+import {
+  MobileList,
+  MobileListItem,
+  MobileItemHeader,
+  MobileFields,
+  MobileField,
+  MobileActions,
+  DesktopTable,
+} from '@/components/ui/ResponsiveList';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Spinner } from '@/components/ui/Spinner';
 import { AutoDir, CaseNumber, Ltr } from '@/components/ui/Bidi';
@@ -32,6 +41,47 @@ import { t } from '@/i18n';
 import { tx } from '@/i18n/rich';
 import { errorMessage } from '@/i18n/errors';
 import { usePageTitle } from '@/hooks/usePageTitle';
+
+/**
+ * Clinic and doctor on separate lines, each direction-isolated. Never "clinic (doctor)":
+ * when a Latin name wraps inside parentheses in RTL, the brackets land mid-name.
+ */
+function Destination({ c }: { c: Case }) {
+  const clinic = c.dentist?.clinic_name || c.clinic_name_text;
+  const dentist = c.dentist?.name || c.dentist_name_text;
+  return (
+    <>
+      <div className="font-semibold text-slate-900">
+        {clinic ? <AutoDir>{clinic}</AutoDir> : '—'}
+      </div>
+      {dentist && (
+        <div className="text-xs text-slate-500">
+          <AutoDir>{dentist}</AutoDir>
+        </div>
+      )}
+    </>
+  );
+}
+
+function Contact({ c }: { c: Case }) {
+  if (!c.dentist?.address && !c.dentist?.phone) return <span className="text-slate-500">—</span>;
+  return (
+    <>
+      {c.dentist?.address && (
+        <div className="flex items-center gap-1 mb-0.5">
+          <MapPin className="h-3 w-3 text-slate-500 shrink-0" aria-hidden="true" />
+          <AutoDir>{c.dentist.address}</AutoDir>
+        </div>
+      )}
+      {c.dentist?.phone && (
+        <div className="flex items-center gap-1">
+          <Phone className="h-3 w-3 text-slate-500 shrink-0" aria-hidden="true" />
+          <Ltr className="whitespace-nowrap">{c.dentist.phone}</Ltr>
+        </div>
+      )}
+    </>
+  );
+}
 
 export function RepresentativeDashboard() {
   usePageTitle(t('dashboards.representative.title'));
@@ -104,6 +154,11 @@ export function RepresentativeDashboard() {
     }
   };
 
+  const openDeliver = (c: Case) => {
+    setDeliverCase(c);
+    setDeliveryNote('');
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -117,11 +172,9 @@ export function RepresentativeDashboard() {
             <RefreshCw className="h-4 w-4 me-1" />
             {t('common.actions.refresh')}
           </Button>
-          <Link to="/batches">
-            <Button size="sm">
-              <Package className="h-4 w-4 me-1" />
-              {t('dashboards.representative.deliveryBatches')}
-            </Button>
+          <Link to="/batches" className={buttonVariants({ size: 'sm' })}>
+            <Package className="h-4 w-4 me-1" aria-hidden="true" />
+            {t('dashboards.representative.deliveryBatches')}
           </Link>
         </div>
       </div>
@@ -174,7 +227,7 @@ export function RepresentativeDashboard() {
       {/* Section 1: In Transit Cases (With Representative) */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
+          <CardTitle id="rep-in-transit-title" className="text-base flex items-center gap-2">
             <Truck className="h-4 w-4 text-blue-600 rtl:-scale-x-100" />
             {t('dashboards.representative.sections.inTransit', { count: inTransitCases.length })}
           </CardTitle>
@@ -185,6 +238,32 @@ export function RepresentativeDashboard() {
           ) : inTransitCases.length === 0 ? (
             <p className="p-4 text-xs text-slate-500 text-center">{t('dashboards.representative.empty.inTransit')}</p>
           ) : (
+            <>
+            <MobileList aria-labelledby="rep-in-transit-title">
+              {inTransitCases.map((c) => (
+                <MobileListItem key={c.id}>
+                  <MobileItemHeader>
+                    <Link to={`/cases/${c.id}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-brand-teal hover:underline">
+                      <CaseNumber value={c.case_number} />
+                    </Link>
+                  </MobileItemHeader>
+                  <MobileFields>
+                    <MobileField label={t('common.labels.patient')}><AutoDir>{c.patient_name}</AutoDir></MobileField>
+                    <MobileField label={t('dashboards.representative.columns.destination')}><Destination c={c} /></MobileField>
+                    <MobileField label={t('dashboards.representative.columns.contact')} className="text-xs text-slate-600">
+                      <Contact c={c} />
+                    </MobileField>
+                  </MobileFields>
+                  <MobileActions>
+                    <Button onClick={() => openDeliver(c)}>
+                      <CheckCircle className="h-4 w-4" aria-hidden="true" />
+                      {t('dashboards.representative.markDelivered')}
+                    </Button>
+                  </MobileActions>
+                </MobileListItem>
+              ))}
+            </MobileList>
+            <DesktopTable>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -202,35 +281,12 @@ export function RepresentativeDashboard() {
                       <Link to={`/cases/${c.id}`} className="hover:underline"><CaseNumber value={c.case_number} /></Link>
                     </TableCell>
                     <TableCell className="font-medium text-slate-900"><AutoDir>{c.patient_name}</AutoDir></TableCell>
-                    <TableCell>
-                      <div className="font-semibold text-slate-900">
-                        <AutoDir>{c.dentist?.clinic_name || c.clinic_name_text || t('common.labels.defaultClinic')}</AutoDir>
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        <AutoDir>{c.dentist?.name || c.dentist_name_text || t('common.labels.defaultDentist')}</AutoDir>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-xs text-slate-600">
-                      {c.dentist?.address && (
-                        <div className="flex items-center gap-1 mb-0.5">
-                          <MapPin className="h-3 w-3 text-slate-500 shrink-0" />
-                          <AutoDir>{c.dentist.address}</AutoDir>
-                        </div>
-                      )}
-                      {c.dentist?.phone && (
-                        <div className="flex items-center gap-1">
-                          <Phone className="h-3 w-3 text-slate-500 shrink-0" />
-                          <Ltr>{c.dentist.phone}</Ltr>
-                        </div>
-                      )}
-                    </TableCell>
+                    <TableCell><Destination c={c} /></TableCell>
+                    <TableCell className="text-xs text-slate-600"><Contact c={c} /></TableCell>
                     <TableCell className="text-end">
                       <Button
                         size="sm"
-                        onClick={() => {
-                          setDeliverCase(c);
-                          setDeliveryNote('');
-                        }}
+                        onClick={() => openDeliver(c)}
                       >
                         <CheckCircle className="h-3.5 w-3.5 me-1" />
                         {t('dashboards.representative.markDelivered')}
@@ -240,6 +296,8 @@ export function RepresentativeDashboard() {
                 ))}
               </TableBody>
             </Table>
+            </DesktopTable>
+            </>
           )}
         </CardContent>
       </Card>
@@ -247,7 +305,7 @@ export function RepresentativeDashboard() {
       {/* Section 2: Ready for Pickup from Lab */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
+          <CardTitle id="rep-pickup-title" className="text-base flex items-center gap-2">
             <Clock className="h-4 w-4 text-amber-600" />
             {t('dashboards.representative.sections.readyForPickup', { count: pickupCases.length })}
           </CardTitle>
@@ -258,6 +316,30 @@ export function RepresentativeDashboard() {
           ) : pickupCases.length === 0 ? (
             <p className="p-4 text-xs text-slate-500 text-center">{t('dashboards.representative.empty.readyForPickup')}</p>
           ) : (
+            <>
+            <MobileList aria-labelledby="rep-pickup-title">
+              {pickupCases.map((c) => (
+                <MobileListItem key={c.id}>
+                  <MobileItemHeader>
+                    <Link to={`/cases/${c.id}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-brand-teal hover:underline">
+                      <CaseNumber value={c.case_number} />
+                    </Link>
+                    <StatusBadge status={c.current_status} />
+                  </MobileItemHeader>
+                  <MobileFields>
+                    <MobileField label={t('common.labels.patient')}><AutoDir>{c.patient_name}</AutoDir></MobileField>
+                    <MobileField label={t('dashboards.representative.columns.destinationDentist')}><Destination c={c} /></MobileField>
+                  </MobileFields>
+                  <MobileActions>
+                    <Button onClick={() => handlePickUp(c)}>
+                      <Truck className="h-4 w-4 rtl:-scale-x-100" aria-hidden="true" />
+                      {t('dashboards.representative.pickUp')}
+                    </Button>
+                  </MobileActions>
+                </MobileListItem>
+              ))}
+            </MobileList>
+            <DesktopTable>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -275,14 +357,7 @@ export function RepresentativeDashboard() {
                       <Link to={`/cases/${c.id}`} className="hover:underline"><CaseNumber value={c.case_number} /></Link>
                     </TableCell>
                     <TableCell className="font-medium text-slate-900"><AutoDir>{c.patient_name}</AutoDir></TableCell>
-                    <TableCell className="text-slate-800">
-                      {c.dentist?.clinic_name
-                        ? t('dashboards.representative.clinicWithDentist', {
-                            clinic: c.dentist.clinic_name,
-                            dentist: c.dentist.name,
-                          })
-                        : <AutoDir>{c.dentist?.name || '—'}</AutoDir>}
-                    </TableCell>
+                    <TableCell><Destination c={c} /></TableCell>
                     <TableCell><StatusBadge status={c.current_status} /></TableCell>
                     <TableCell className="text-end">
                       <Button
@@ -297,6 +372,8 @@ export function RepresentativeDashboard() {
                 ))}
               </TableBody>
             </Table>
+            </DesktopTable>
+            </>
           )}
         </CardContent>
       </Card>

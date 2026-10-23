@@ -59,8 +59,6 @@ export const common = {
     unassigned: 'غير معيّن',
     none: '—',
     overdue: 'متأخرة',
-    tooth: 'السن: {value}',
-    shade: 'اللون: {value}',
     age: 'العمر: {value}',
     defaultDentist: 'الطبيب',
     defaultClinic: 'العيادة',

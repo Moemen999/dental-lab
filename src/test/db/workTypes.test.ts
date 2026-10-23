@@ -5,11 +5,12 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
-import { createTestDb, seedStaff, seedCase, seedWorkType, attempt, attemptTx, as, USERS } from './harness';
+import { createTestDb, seedStaff, seedCase, seedWorkType, appCaseJaw, attempt, attemptTx, as, USERS } from './harness';
 
 let db: PGlite;
 let activeTypeId: string | null;
 let inactiveTypeId: string | null;
+let jaw = { col: '', val: '' };
 
 // Neutral fake names: real types are entered by the lab owner.
 const ACTIVE = 'نوع تجريبي أ';
@@ -20,6 +21,7 @@ beforeAll(async () => {
   await seedStaff(db);
   activeTypeId = await seedWorkType(db, ACTIVE);
   inactiveTypeId = await seedWorkType(db, INACTIVE, false);
+  jaw = await appCaseJaw(db); // a jaw is required from migration 014
 }, 120_000);
 
 /** Blocked by permissions/rules, not because the table is missing. */
@@ -123,14 +125,18 @@ describe('audit trail', () => {
 describe('cases use the active list', () => {
   const register = (caseType: string) =>
     attempt(db, as.user(USERS.receptionist),
-      `INSERT INTO cases (patient_name, case_type) VALUES ('مريض تجريبي', $1) RETURNING case_type`, [caseType]);
+      `INSERT INTO cases (patient_name, case_type${jaw.col}) VALUES ('مريض تجريبي', $1${jaw.val}) RETURNING case_type`, [caseType]);
 
   it('rejects a case type that is not in the list', async () => {
-    expect(blocked(await register('Crown'))).toBe(true);
+    const r = await register('Crown');
+    expect(blocked(r)).toBe(true);
+    expect(r.hint).not.toBe('err.case.jaw_required');
   });
 
   it('rejects an inactive type', async () => {
-    expect(blocked(await register(INACTIVE))).toBe(true);
+    const inactive = await register(INACTIVE);
+    expect(blocked(inactive)).toBe(true);
+    expect(inactive.hint).not.toBe('err.case.jaw_required');
   });
 
   it('rejects changing an existing case to an unknown type', async () => {

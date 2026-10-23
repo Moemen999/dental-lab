@@ -6,6 +6,7 @@ interface ErrorLike {
   message?: unknown;
   code?: unknown;
   hint?: unknown;
+  details?: unknown;
   name?: unknown;
   status?: unknown;
 }
@@ -40,6 +41,10 @@ export function errorMessage(err: unknown): string {
 
   // 3. Postgres / PostgREST codes.
   if (code === '42501') return generic.permissionDenied;
+  // Unique index on payments.reverses_payment_id (migration 015): a second reversal.
+  if (code === '23505' && `${message} ${String(e.details ?? '')}`.includes('payments_one_reversal')) {
+    return ar.errors.db['err.payment.already_reversed'];
+  }
   if (code === '23505') return generic.duplicate;
   if (['23502', '23503', '23514', '22P02', '22001', '22003', '22007', '22008'].includes(code)) {
     return generic.invalidData;

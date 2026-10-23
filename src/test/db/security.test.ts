@@ -7,11 +7,12 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
-import { createTestDb, seedStaff, seedCase, seedWorkType, triggerExists, attempt, attemptTx, as, USERS } from './harness';
+import { createTestDb, seedStaff, seedCase, seedWorkType, appCaseJaw, triggerExists, attempt, attemptTx, as, USERS } from './harness';
 
 let db: PGlite;
 let techBCase: string;
 let pickupCase: string;
+let jaw = { col: '', val: '' };
 
 beforeAll(async () => {
   db = await createTestDb();
@@ -20,6 +21,7 @@ beforeAll(async () => {
   for (const name of ['Crown', 'Bridge', 'Veneer']) await seedWorkType(db, name);
   techBCase = await seedCase(db, { status: 'assigned', technician: USERS.techB, patient: 'Fake Patient B' });
   pickupCase = await seedCase(db, { status: 'awaiting_representative_pickup', technician: USERS.techA });
+  jaw = await appCaseJaw(db); // a jaw is required from migration 014
 }, 120_000);
 
 async function profileRole(id: string) {
@@ -163,8 +165,8 @@ describe('Exploit 6: client-chosen case_number and status on INSERT', () => {
   it('ignores client case_number and status', async () => {
     const r = await attempt<{ case_number: string; current_status: string; registered_by: string }>(
       db, as.user(USERS.owner),
-      `INSERT INTO cases (case_number, patient_name, case_type, current_status, registered_by)
-       VALUES ('CASE-199901-00001', 'Fake C', 'Crown', 'delivered', $1)
+      `INSERT INTO cases (case_number, patient_name, case_type, current_status, registered_by${jaw.col})
+       VALUES ('CASE-199901-00001', 'Fake C', 'Crown', 'delivered', $1${jaw.val})
        RETURNING case_number, current_status, registered_by`,
       [USERS.rep]);
     expect(r.ok, r.error).toBe(true);
@@ -176,8 +178,8 @@ describe('Exploit 6: client-chosen case_number and status on INSERT', () => {
 
   it('derives "assigned" when an active technician is chosen', async () => {
     const r = await attempt<{ current_status: string }>(db, as.user(USERS.receptionist),
-      `INSERT INTO cases (patient_name, case_type, current_status, assigned_technician_id)
-       VALUES ('Fake D', 'Bridge', 'delivered', $1) RETURNING current_status`,
+      `INSERT INTO cases (patient_name, case_type, current_status, assigned_technician_id${jaw.col})
+       VALUES ('Fake D', 'Bridge', 'delivered', $1${jaw.val}) RETURNING current_status`,
       [USERS.techA]);
     expect(r.ok, r.error).toBe(true);
     expect(r.rows[0].current_status).toBe('assigned');
@@ -185,10 +187,11 @@ describe('Exploit 6: client-chosen case_number and status on INSERT', () => {
 
   it('rejects assigning a case to a non-technician', async () => {
     const r = await attempt(db, as.user(USERS.receptionist),
-      `INSERT INTO cases (patient_name, case_type, assigned_technician_id)
-       VALUES ('Fake E', 'Bridge', $1) RETURNING id`,
+      `INSERT INTO cases (patient_name, case_type, assigned_technician_id${jaw.col})
+       VALUES ('Fake E', 'Bridge', $1${jaw.val}) RETURNING id`,
       [USERS.rep]);
     expect(r.ok).toBe(false);
+    expect(r.hint).not.toBe('err.case.jaw_required');
   });
 });
 
@@ -275,7 +278,7 @@ describe('Full workflow still works after hardening', () => {
       return r.rows;
     };
     const [{ id }] = (await step(USERS.receptionist,
-      `INSERT INTO cases (patient_name, case_type) VALUES ('Fake Flow', 'Veneer') RETURNING id`, [])) as { id: string }[];
+      `INSERT INTO cases (patient_name, case_type${jaw.col}) VALUES ('Fake Flow', 'Veneer'${jaw.val}) RETURNING id`, [])) as { id: string }[];
     await step(USERS.receptionist,
       `UPDATE cases SET assigned_technician_id = $2, assigned_at = now(), current_status = 'assigned' WHERE id = $1 RETURNING id`,
       [id, USERS.techA]);

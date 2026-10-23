@@ -8,7 +8,16 @@ import {
   useTechnicians,
 } from '@/hooks/useSupabase';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonVariants } from '@/components/ui/Button';
+import {
+  MobileList,
+  MobileListItem,
+  MobileItemHeader,
+  MobileFields,
+  MobileField,
+  MobileActions,
+  DesktopTable,
+} from '@/components/ui/ResponsiveList';
 import { Select } from '@/components/ui/Select';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Spinner } from '@/components/ui/Spinner';
@@ -39,6 +48,11 @@ import { t } from '@/i18n';
 import { tx } from '@/i18n/rich';
 import { errorMessage } from '@/i18n/errors';
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { LateCasesCard } from '@/components/LateCasesCard';
+
+function DentistName({ c }: { c: Case }) {
+  return <AutoDir>{c.dentist?.name || c.dentist_name_text || '—'}</AutoDir>;
+}
 
 export function ReceptionDashboard() {
   usePageTitle(t('dashboards.reception.title'));
@@ -125,6 +139,11 @@ export function ReceptionDashboard() {
     }
   };
 
+  const openAssign = (c: Case) => {
+    setAssignCase(c);
+    setSelectedTechId('');
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -138,20 +157,18 @@ export function ReceptionDashboard() {
             <RefreshCw className="h-4 w-4 me-1" />
             {t('common.actions.refresh')}
           </Button>
-          <Link to="/cases/new">
-            <Button size="sm">
-              <Plus className="h-4 w-4 me-1" />
-              {t('dashboards.reception.registerCase')}
-            </Button>
+          <Link to="/cases/new" className={buttonVariants({ size: 'sm' })}>
+            <Plus className="h-4 w-4 me-1" aria-hidden="true" />
+            {t('dashboards.reception.registerCase')}
           </Link>
-          <Link to="/batches">
-            <Button variant="secondary" size="sm">
-              <Package className="h-4 w-4 me-1" />
-              {t('dashboards.reception.batches')}
-            </Button>
+          <Link to="/batches" className={buttonVariants({ variant: 'secondary', size: 'sm' })}>
+            <Package className="h-4 w-4 me-1" aria-hidden="true" />
+            {t('dashboards.reception.batches')}
           </Link>
         </div>
       </div>
+
+      <LateCasesCard />
 
       {/* Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -201,7 +218,7 @@ export function ReceptionDashboard() {
       {/* Section 1: Cases Awaiting Assignment */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
+          <CardTitle id="rec-assign-title" className="text-base flex items-center gap-2">
             <UserCheck className="h-4 w-4 text-amber-600" />
             {t('dashboards.reception.sections.awaitingAssignment', { count: awaitingAssignCases.length })}
           </CardTitle>
@@ -212,6 +229,33 @@ export function ReceptionDashboard() {
           ) : awaitingAssignCases.length === 0 ? (
             <p className="p-4 text-xs text-slate-500 text-center">{t('dashboards.reception.empty.awaitingAssignment')}</p>
           ) : (
+            <>
+            <MobileList aria-labelledby="rec-assign-title">
+              {awaitingAssignCases.map((c) => (
+                <MobileListItem key={c.id}>
+                  <MobileItemHeader>
+                    <Link to={`/cases/${c.id}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-brand-teal hover:underline">
+                      <CaseNumber value={c.case_number} />
+                    </Link>
+                  </MobileItemHeader>
+                  <MobileFields>
+                    <MobileField label={t('common.labels.patient')}><AutoDir>{c.patient_name}</AutoDir></MobileField>
+                    <MobileField label={t('common.labels.dentist')}><DentistName c={c} /></MobileField>
+                    <MobileField label={t('common.labels.type')}>{caseTypeLabel(c.case_type)}</MobileField>
+                    <MobileField label={t('dashboards.reception.columns.targetDue')} className="whitespace-nowrap">
+                      {c.due_date ? formatDate(c.due_date) : '—'}
+                    </MobileField>
+                  </MobileFields>
+                  <MobileActions>
+                    <Button onClick={() => openAssign(c)}>
+                      <UserCheck className="h-4 w-4" aria-hidden="true" />
+                      {t('dashboards.reception.assignTech')}
+                    </Button>
+                  </MobileActions>
+                </MobileListItem>
+              ))}
+            </MobileList>
+            <DesktopTable>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -230,16 +274,13 @@ export function ReceptionDashboard() {
                       <Link to={`/cases/${c.id}`} className="hover:underline"><CaseNumber value={c.case_number} /></Link>
                     </TableCell>
                     <TableCell className="font-medium text-slate-900"><AutoDir>{c.patient_name}</AutoDir></TableCell>
-                    <TableCell className="text-slate-700"><AutoDir>{c.dentist?.name || c.dentist_name_text || '—'}</AutoDir></TableCell>
+                    <TableCell className="text-slate-700"><DentistName c={c} /></TableCell>
                     <TableCell className="text-slate-800">{caseTypeLabel(c.case_type)}</TableCell>
                     <TableCell className="text-xs text-slate-600 whitespace-nowrap">{c.due_date ? formatDate(c.due_date) : '—'}</TableCell>
                     <TableCell className="text-end">
                       <Button
                         size="sm"
-                        onClick={() => {
-                          setAssignCase(c);
-                          setSelectedTechId('');
-                        }}
+                        onClick={() => openAssign(c)}
                       >
                         <UserCheck className="h-3.5 w-3.5 me-1" />
                         {t('dashboards.reception.assignTech')}
@@ -249,6 +290,8 @@ export function ReceptionDashboard() {
                 ))}
               </TableBody>
             </Table>
+            </DesktopTable>
+            </>
           )}
         </CardContent>
       </Card>
@@ -256,7 +299,7 @@ export function ReceptionDashboard() {
       {/* Section 2: Cases Submitted by Techs (Awaiting Reception Receipt) */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
+          <CardTitle id="rec-receipt-title" className="text-base flex items-center gap-2">
             <Inbox className="h-4 w-4 text-blue-600" />
             {t('dashboards.reception.sections.awaitingReceipt', { count: awaitingReceiptCases.length })}
           </CardTitle>
@@ -267,6 +310,30 @@ export function ReceptionDashboard() {
           ) : awaitingReceiptCases.length === 0 ? (
             <p className="p-4 text-xs text-slate-500 text-center">{t('dashboards.reception.empty.awaitingReceipt')}</p>
           ) : (
+            <>
+            <MobileList aria-labelledby="rec-receipt-title">
+              {awaitingReceiptCases.map((c) => (
+                <MobileListItem key={c.id}>
+                  <MobileItemHeader>
+                    <Link to={`/cases/${c.id}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-brand-teal hover:underline">
+                      <CaseNumber value={c.case_number} />
+                    </Link>
+                  </MobileItemHeader>
+                  <MobileFields>
+                    <MobileField label={t('common.labels.patient')}><AutoDir>{c.patient_name}</AutoDir></MobileField>
+                    <MobileField label={t('common.labels.technician')}><AutoDir>{c.assigned_technician?.full_name || '—'}</AutoDir></MobileField>
+                    <MobileField label={t('common.labels.dentist')}><DentistName c={c} /></MobileField>
+                  </MobileFields>
+                  <MobileActions>
+                    <Button onClick={() => handleReceiveFromTech(c)}>
+                      <CheckCircle className="h-4 w-4" aria-hidden="true" />
+                      {t('dashboards.reception.receive')}
+                    </Button>
+                  </MobileActions>
+                </MobileListItem>
+              ))}
+            </MobileList>
+            <DesktopTable>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -285,7 +352,7 @@ export function ReceptionDashboard() {
                     </TableCell>
                     <TableCell className="font-medium text-slate-900"><AutoDir>{c.patient_name}</AutoDir></TableCell>
                     <TableCell className="text-slate-800 font-medium"><AutoDir>{c.assigned_technician?.full_name || '—'}</AutoDir></TableCell>
-                    <TableCell className="text-slate-700"><AutoDir>{c.dentist?.name || c.dentist_name_text || '—'}</AutoDir></TableCell>
+                    <TableCell className="text-slate-700"><DentistName c={c} /></TableCell>
                     <TableCell className="text-end">
                       <Button
                         size="sm"
@@ -299,6 +366,8 @@ export function ReceptionDashboard() {
                 ))}
               </TableBody>
             </Table>
+            </DesktopTable>
+            </>
           )}
         </CardContent>
       </Card>
@@ -306,7 +375,7 @@ export function ReceptionDashboard() {
       {/* Section 3: Ready for Representative Pickup */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
+          <CardTitle id="rec-pickup-title" className="text-base flex items-center gap-2">
             <Truck className="h-4 w-4 text-emerald-600" />
             {t('dashboards.reception.sections.inReception', { count: readyPickupCases.length })}
           </CardTitle>
@@ -317,6 +386,32 @@ export function ReceptionDashboard() {
           ) : readyPickupCases.length === 0 ? (
             <p className="p-4 text-xs text-slate-500 text-center">{t('dashboards.reception.empty.inReception')}</p>
           ) : (
+            <>
+            <MobileList aria-labelledby="rec-pickup-title">
+              {readyPickupCases.map((c) => (
+                <MobileListItem key={c.id}>
+                  <MobileItemHeader>
+                    <Link to={`/cases/${c.id}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-brand-teal hover:underline">
+                      <CaseNumber value={c.case_number} />
+                    </Link>
+                    <StatusBadge status={c.current_status} />
+                  </MobileItemHeader>
+                  <MobileFields>
+                    <MobileField label={t('common.labels.patient')}><AutoDir>{c.patient_name}</AutoDir></MobileField>
+                    <MobileField label={t('dashboards.reception.columns.clinicDestination')}>
+                      <AutoDir>{c.dentist?.clinic_name || c.dentist?.name || c.clinic_name_text || '—'}</AutoDir>
+                    </MobileField>
+                  </MobileFields>
+                  <MobileActions>
+                    <Button variant="secondary" onClick={() => handleReleaseToRep(c)}>
+                      <Send className="h-4 w-4 rtl:-scale-x-100" aria-hidden="true" />
+                      {t('dashboards.reception.stage')}
+                    </Button>
+                  </MobileActions>
+                </MobileListItem>
+              ))}
+            </MobileList>
+            <DesktopTable>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -352,6 +447,8 @@ export function ReceptionDashboard() {
                 ))}
               </TableBody>
             </Table>
+            </DesktopTable>
+            </>
           )}
         </CardContent>
       </Card>

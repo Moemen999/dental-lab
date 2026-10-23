@@ -3,11 +3,21 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCases, useUpdateCaseStatus } from '@/hooks/useSupabase';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonVariants } from '@/components/ui/Button';
+import {
+  MobileList,
+  MobileListItem,
+  MobileItemHeader,
+  MobileFields,
+  MobileField,
+  MobileActions,
+  DesktopTable,
+} from '@/components/ui/ResponsiveList';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { AutoDir, CaseNumber, Ltr } from '@/components/ui/Bidi';
+import { AutoDir, CaseNumber } from '@/components/ui/Bidi';
+import { JawText, LegacySpecsLine } from '@/components/CaseJawSpecs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/Dialog';
 import { Textarea } from '@/components/ui/Textarea';
 import {
@@ -23,11 +33,10 @@ import {
   PRIORITY_COLORS,
   CASE_STATUS_LABELS,
   caseTypeLabel,
-  shadeLabel,
   type Case,
   type CaseStatus,
 } from '@/types/database';
-import { formatDate, isOverdue } from '@/lib/utils';
+import { cn, formatDate, isOverdue } from '@/lib/utils';
 import {
   Play,
   CheckCircle,
@@ -43,6 +52,46 @@ import { t } from '@/i18n';
 import { tx } from '@/i18n/rich';
 import { errorMessage } from '@/i18n/errors';
 import { usePageTitle } from '@/hooks/usePageTitle';
+
+function PatientAndDentist({ c }: { c: Case }) {
+  return (
+    <>
+      <div className="font-medium text-slate-900"><AutoDir>{c.patient_name}</AutoDir></div>
+      <div className="text-xs text-slate-500">
+        <AutoDir>{c.dentist?.name || c.dentist_name_text || t('common.labels.defaultDentist')}</AutoDir>
+      </div>
+    </>
+  );
+}
+
+function Specs({ c }: { c: Case }) {
+  return (
+    <>
+      <div className="text-sm font-semibold text-slate-800">{caseTypeLabel(c.case_type)}</div>
+      <JawText value={c} className="block text-xs font-medium text-slate-700" />
+      <LegacySpecsLine value={c} className="block text-xs" />
+    </>
+  );
+}
+
+function PriorityPill({ c }: { c: Case }) {
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${PRIORITY_COLORS[c.priority]}`}>
+      {PRIORITY_LABELS[c.priority]}
+    </span>
+  );
+}
+
+function DueDate({ c }: { c: Case }) {
+  if (!c.due_date) return <span className="text-xs text-slate-500">—</span>;
+  const overdue = isOverdue(c.due_date, c.current_status);
+  return (
+    <div className={`text-xs whitespace-nowrap ${overdue ? 'text-red-600 font-bold' : 'text-slate-600'}`}>
+      {formatDate(c.due_date)}
+      {overdue && <span className="block text-[11px] text-red-700">{t('common.labels.overdue')}</span>}
+    </div>
+  );
+}
 
 export function TechnicianDashboard() {
   usePageTitle(t('layout.nav.myCases'));
@@ -115,10 +164,82 @@ export function TechnicianDashboard() {
     }
   };
 
+  // Same buttons in the phone card (labelled, 44px) and the table row (compact).
+  const renderActions = (c: Case, mobile: boolean) => {
+    const size = mobile ? 'default' : 'sm';
+    return (
+      <>
+        {c.current_status === 'assigned' && (
+          <Button size={size} onClick={() => handleStartWork(c)}>
+            <Play className="h-3.5 w-3.5 me-1" aria-hidden="true" />
+            {t('dashboards.technician.startWork')}
+          </Button>
+        )}
+
+        {c.current_status === 'in_progress' && (
+          <>
+            <Button size={size} onClick={() => openStatusDialog(c, 'completed')}>
+              <CheckCircle className="h-3.5 w-3.5 me-1" aria-hidden="true" />
+              {t('dashboards.technician.complete')}
+            </Button>
+            <Button
+              size={size}
+              variant="outline"
+              onClick={() => openStatusDialog(c, 'on_hold')}
+              title={mobile ? undefined : t('dashboards.technician.putOnHold')}
+              aria-label={mobile ? undefined : t('dashboards.technician.putOnHold')}
+            >
+              <PauseCircle className="h-3.5 w-3.5 text-amber-600" aria-hidden="true" />
+              {mobile && t('dashboards.technician.putOnHold')}
+            </Button>
+          </>
+        )}
+
+        {c.current_status === 'completed' && (
+          <Button
+            size={size}
+            variant="secondary"
+            onClick={() => openStatusDialog(c, 'awaiting_reception_receipt')}
+          >
+            <Send className="h-3.5 w-3.5 me-1 rtl:-scale-x-100" aria-hidden="true" />
+            {t('dashboards.technician.submitToReception')}
+          </Button>
+        )}
+
+        {mobile ? (
+          <Link
+            to={`/cases/${c.id}`}
+            className={cn(buttonVariants({ variant: 'outline' }), 'text-brand-teal')}
+          >
+            <Eye className="h-4 w-4" aria-hidden="true" />
+            {t('common.actions.viewDetails')}
+          </Link>
+        ) : (
+          // One interactive element (a link styled as a button), not a button inside a link.
+          <Link
+            to={`/cases/${c.id}`}
+            className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+            title={t('common.actions.viewDetails')}
+            aria-label={t('common.actions.viewDetails')}
+          >
+            <Eye className="h-4 w-4" aria-hidden="true" />
+          </Link>
+        )}
+      </>
+    );
+  };
+
+  // Tabs: 44px high on phones, compact from md up.
   const tabClass = (tab: typeof activeTab) =>
-    `px-3 py-1 text-xs rounded font-medium transition ${
+    `min-h-11 md:min-h-0 px-3 py-1 text-xs rounded font-medium transition ${
       activeTab === tab ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
     }`;
+  const tabProps = (tab: typeof activeTab) => ({
+    type: 'button' as const,
+    'aria-pressed': activeTab === tab,
+    onClick: () => setActiveTab(tab),
+    className: tabClass(tab),
+  });
 
   return (
     <div className="space-y-6">
@@ -198,15 +319,15 @@ export function TechnicianDashboard() {
       {/* Workbench Cases List */}
       <Card>
         <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-3 gap-3">
-          <CardTitle className="text-base">{t('dashboards.technician.queueTitle')}</CardTitle>
+          <CardTitle id="tech-queue-title" className="text-base">{t('dashboards.technician.queueTitle')}</CardTitle>
           <div className="flex rounded-md border border-slate-200 p-0.5 bg-slate-50 self-start">
-            <button onClick={() => setActiveTab('in_progress')} className={tabClass('in_progress')}>
+            <button {...tabProps('in_progress')}>
               {t('dashboards.technician.tabs.inProgress', { count: inProgressCases.length })}
             </button>
-            <button onClick={() => setActiveTab('assigned')} className={tabClass('assigned')}>
+            <button {...tabProps('assigned')}>
               {t('dashboards.technician.tabs.assigned', { count: assignedCases.length })}
             </button>
-            <button onClick={() => setActiveTab('all')} className={tabClass('all')}>
+            <button {...tabProps('all')}>
               {t('dashboards.technician.tabs.all', { count: myCases.length })}
             </button>
           </div>
@@ -222,7 +343,27 @@ export function TechnicianDashboard() {
               description={t('dashboards.technician.empty.description')}
             />
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            <MobileList aria-labelledby="tech-queue-title">
+              {displayedCases.map((c) => (
+                <MobileListItem key={c.id}>
+                  <MobileItemHeader>
+                    <Link to={`/cases/${c.id}`} className="text-sm font-semibold text-brand-teal hover:underline">
+                      <CaseNumber value={c.case_number} />
+                    </Link>
+                    <StatusBadge status={c.current_status} />
+                  </MobileItemHeader>
+                  <MobileFields>
+                    <MobileField label={t('common.labels.patient')}><PatientAndDentist c={c} /></MobileField>
+                    <MobileField label={t('dashboards.technician.columns.specifications')}><Specs c={c} /></MobileField>
+                    <MobileField label={t('common.labels.priority')}><PriorityPill c={c} /></MobileField>
+                    <MobileField label={t('dashboards.technician.columns.targetDue')}><DueDate c={c} /></MobileField>
+                  </MobileFields>
+                  <MobileActions>{renderActions(c, true)}</MobileActions>
+                </MobileListItem>
+              ))}
+            </MobileList>
+            <DesktopTable>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -236,122 +377,34 @@ export function TechnicianDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {displayedCases.map((c) => {
-                    const overdue = isOverdue(c.due_date, c.current_status);
-
-                    return (
-                      <TableRow key={c.id}>
-                        <TableCell className="font-semibold whitespace-nowrap">
-                          <Link
-                            to={`/cases/${c.id}`}
-                            className="text-sm text-brand-teal hover:underline"
-                          >
-                            <CaseNumber value={c.case_number} />
-                          </Link>
-                        </TableCell>
-                        <TableCell>
-                          <div className="font-medium text-slate-900"><AutoDir>{c.patient_name}</AutoDir></div>
-                          <div className="text-xs text-slate-500">
-                            <AutoDir>{c.dentist?.name || c.dentist_name_text || t('common.labels.defaultDentist')}</AutoDir>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="text-sm font-semibold text-slate-800">
-                            {caseTypeLabel(c.case_type)}
-                          </div>
-                          <div className="text-xs text-slate-500 flex flex-wrap gap-x-2">
-                            {c.tooth_number && (
-                              <span>{tx('common.labels.tooth', { value: <Ltr>{c.tooth_number}</Ltr> })}</span>
-                            )}
-                            {c.shade && (
-                              <span>{tx('common.labels.shade', { value: <Ltr>{shadeLabel(c.shade)}</Ltr> })}</span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                              PRIORITY_COLORS[c.priority]
-                            }`}
-                          >
-                            {PRIORITY_LABELS[c.priority]}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <StatusBadge status={c.current_status} />
-                        </TableCell>
-                        <TableCell>
-                          {c.due_date ? (
-                            <div className={`text-xs whitespace-nowrap ${overdue ? 'text-red-600 font-bold' : 'text-slate-600'}`}>
-                              {formatDate(c.due_date)}
-                              {overdue && <span className="block text-[11px] text-red-700">{t('common.labels.overdue')}</span>}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-slate-500">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-end">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {c.current_status === 'assigned' && (
-                              <Button
-                                size="sm"
-                                onClick={() => handleStartWork(c)}
-                              >
-                                <Play className="h-3.5 w-3.5 me-1" />
-                                {t('dashboards.technician.startWork')}
-                              </Button>
-                            )}
-
-                            {c.current_status === 'in_progress' && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  onClick={() => openStatusDialog(c, 'completed')}
-                                >
-                                  <CheckCircle className="h-3.5 w-3.5 me-1" />
-                                  {t('dashboards.technician.complete')}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => openStatusDialog(c, 'on_hold')}
-                                  title={t('dashboards.technician.putOnHold')}
-                                  aria-label={t('dashboards.technician.putOnHold')}
-                                >
-                                  <PauseCircle className="h-3.5 w-3.5 text-amber-600" />
-                                </Button>
-                              </>
-                            )}
-
-                            {c.current_status === 'completed' && (
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                onClick={() => openStatusDialog(c, 'awaiting_reception_receipt')}
-                              >
-                                <Send className="h-3.5 w-3.5 me-1 rtl:-scale-x-100" />
-                                {t('dashboards.technician.submitToReception')}
-                              </Button>
-                            )}
-
-                            <Link to={`/cases/${c.id}`}>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                title={t('common.actions.viewDetails')}
-                                aria-label={t('common.actions.viewDetails')}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                            </Link>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {displayedCases.map((c) => (
+                    <TableRow key={c.id}>
+                      <TableCell className="font-semibold whitespace-nowrap">
+                        <Link
+                          to={`/cases/${c.id}`}
+                          className="text-sm text-brand-teal hover:underline"
+                        >
+                          <CaseNumber value={c.case_number} />
+                        </Link>
+                      </TableCell>
+                      <TableCell><PatientAndDentist c={c} /></TableCell>
+                      <TableCell><Specs c={c} /></TableCell>
+                      <TableCell><PriorityPill c={c} /></TableCell>
+                      <TableCell>
+                        <StatusBadge status={c.current_status} />
+                      </TableCell>
+                      <TableCell><DueDate c={c} /></TableCell>
+                      <TableCell className="text-end">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {renderActions(c, false)}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
-            </div>
+            </DesktopTable>
+            </>
           )}
         </CardContent>
       </Card>

@@ -70,3 +70,30 @@ The following direct exploit scenarios are explicitly verified and rejected serv
    - If an Owner attempts to deactivate or demote their own account, or if there is only one active Owner remaining, database trigger `protect_last_active_owner` aborts the transaction with an explicit exception.
 5. **Tampering with Audit or History**:
    - Any SQL `UPDATE` or `DELETE` directed at `case_events` or `audit_logs` fails immediately because database permissions have been revoked (`REVOKE UPDATE, DELETE`).
+6. **Reading or changing money as a non-finance role** (migration 015):
+   - Technicians, representatives, inactive users and anon get no rows from `price_list`, `dentist_discounts`, `case_charges`, `payments`, and the money functions refuse them (`err.money.forbidden`). Payments cannot be edited or deleted by anyone (`REVOKE UPDATE, DELETE` plus triggers that also stop the database owner); corrections are new negative rows. A receptionist cannot move a delivered case's debt to another doctor (`err.case.delivered_dentist_locked`).
+
+---
+
+## 4. Pricing & Accounts (migration 015)
+
+Money is never visible to technicians or representatives. Inactive accounts and anon get nothing.
+
+| Entity / Operation | Owner | Receptionist | Representative | Technician |
+| :--- | :---: | :---: | :---: | :---: |
+| View price list / doctor discounts | ✅ | ✅ | ❌ | ❌ |
+| Set price per work type | ✅ | ❌ | ❌ | ❌ |
+| Set doctor discount | ✅ | ❌ | ❌ | ❌ |
+| View a doctor's opening balance | ✅ | ✅ | ❌ | ❌ |
+| Set / change / remove a doctor's opening balance | ✅ (audited) | ❌ | ❌ | ❌ |
+| View a case's price (`case_charges`) | ✅ | ✅ | ❌ | ❌ |
+| Change a case's price / discount | ✅ (becomes `manual`, audited) | ❌ | ❌ | ❌ |
+| Change the doctor of a **delivered** case | ✅ (audited) | ❌ | ❌ | ❌ |
+| Change the doctor of a case that has payments | ❌ | ❌ | ❌ | ❌ |
+| Record a payment (per case or on account) | ✅ | ✅ | ❌ | ❌ |
+| Reverse a payment (new negative row) | ✅ | ✅ | ❌ | ❌ |
+| Edit / delete a payment | ❌ **FORBIDDEN** | ❌ **FORBIDDEN** | ❌ **FORBIDDEN** | ❌ **FORBIDDEN** |
+| Doctor statement, balances, case balance | ✅ | ✅ | ❌ | ❌ |
+| Owner dashboard stats (`get_owner_dashboard_stats`) | ✅ | ❌ | ❌ | ❌ |
+
+Server-side enforcement: RLS policies on the five money tables; column grant on `case_charges` (`list_price`, `discount_percent` only); `UPDATE`/`DELETE` revoked on `payments` and refused by triggers for every role, including the database owner; no write privileges for `service_role` on the money tables; role checks via `private.caller_has_role` inside the SECURITY DEFINER functions and triggers. Verified in `src/test/db/pricing.test.ts`.

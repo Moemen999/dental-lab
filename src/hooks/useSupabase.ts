@@ -1,7 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { t } from '@/i18n';
-import type { Case, CaseStatus, Profile, Dentist, DeliveryBatch, CaseEvent, AuditLog, CasePriority, WorkType } from '@/types/database';
+import { CASE_STATUS_LABELS } from '@/types/database';
+import type {
+  Case, CaseInsert, CaseStatus, Profile, Dentist, DeliveryBatch, CaseEvent, AuditLog, CasePriority, WorkType, LateCase, LateCaseCounts,
+  Money, PriceListEntry, DentistDiscount, DentistOpeningBalance, DentistBalance, DentistStatement, CaseBalance,
+  OwnerDashboardStats, PaymentMethod,
+} from '@/types/database';
+import { isDuplicatePaymentId } from '@/lib/payments';
 
 // ---- Profile Hooks ----
 
@@ -161,6 +167,7 @@ export function useReassignAndDeactivateTechnician() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profiles'] });
       queryClient.invalidateQueries({ queryKey: ['cases'] });
+      queryClient.invalidateQueries({ queryKey: ['late-cases'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
     },
   });
@@ -287,7 +294,7 @@ export function useCreateCase() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (caseData: Partial<Case>) => {
+    mutationFn: async (caseData: CaseInsert) => {
       const { data, error } = await supabase
         .from('cases')
         .insert(caseData)
@@ -298,6 +305,7 @@ export function useCreateCase() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cases'] });
+      queryClient.invalidateQueries({ queryKey: ['late-cases'] });
     },
   });
 }
@@ -318,6 +326,7 @@ export function useUpdateCase() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['cases'] });
+      queryClient.invalidateQueries({ queryKey: ['late-cases'] });
       queryClient.invalidateQueries({ queryKey: ['case', data.id] });
     },
   });
@@ -339,6 +348,7 @@ export function useUpdateCaseStatus() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['cases'] });
+      queryClient.invalidateQueries({ queryKey: ['late-cases'] });
       queryClient.invalidateQueries({ queryKey: ['case', data.id] });
       queryClient.invalidateQueries({ queryKey: ['case-events', data.id] });
     },
@@ -371,6 +381,7 @@ export function useAssignTechnician() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['cases'] });
+      queryClient.invalidateQueries({ queryKey: ['late-cases'] });
       queryClient.invalidateQueries({ queryKey: ['case', data.id] });
       queryClient.invalidateQueries({ queryKey: ['case-events', data.id] });
     },
@@ -669,58 +680,270 @@ export function useAuditLogs(page = 1, pageSize = 50) {
   });
 }
 
+/** Owner dashboard numbers (RPC get_owner_dashboard_stats, owner only, KNOWN_ISSUES #16). */
 export interface DashboardStats extends Record<CaseStatus, number> {
   overdue: number;
   total: number;
   activeEmployees: number;
+  /** Owed to the lab by all doctors (opening balances + delivered priced cases - payments). */
+  totalOutstanding: Money | null;
+  unpricedDeliveredCount: number;
+  deliveredWithoutDentistCount: number;
 }
 
+/** One database call instead of 17 count queries; the same numbers (overdue by Cairo date). */
 export function useDashboardStats() {
   return useQuery<DashboardStats>({
     queryKey: ['dashboard-stats'],
     queryFn: async () => {
-      const statuses: CaseStatus[] = [
-        'intake_pending', 'registered', 'awaiting_assignment', 'assigned',
-        'in_progress', 'completed', 'awaiting_reception_receipt',
-        'received_by_reception', 'awaiting_representative_pickup',
-        'with_representative', 'delivered', 'on_hold', 'rework_required', 'cancelled',
-      ];
-
-      const counts: Record<string, number> = {};
-
-      for (const status of statuses) {
-        const { count } = await supabase
-          .from('cases')
-          .select('*', { count: 'exact', head: true })
-          .eq('current_status', status);
-        counts[status] = count || 0;
-      }
-
-      // Overdue cases
-      const { count: overdueCount } = await supabase
-        .from('cases')
-        .select('*', { count: 'exact', head: true })
-        .lt('due_date', new Date().toISOString().split('T')[0])
-        .not('current_status', 'in', '("delivered","cancelled")');
-
-      // Total cases
-      const { count: totalCount } = await supabase
-        .from('cases')
-        .select('*', { count: 'exact', head: true });
-
-      // Active employees
-      const { count: activeEmployees } = await supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'active');
-
+      const { data, error } = await supabase.rpc('get_owner_dashboard_stats');
+      if (error) throw error;
+      const s = (data ?? {}) as Partial<OwnerDashboardStats>;
+      const statuses = Object.keys(CASE_STATUS_LABELS) as CaseStatus[];
+      const counts = Object.fromEntries(statuses.map((st) => [st, Number(s[st] ?? 0)])) as Record<CaseStatus, number>;
       return {
         ...counts,
-        overdue: overdueCount || 0,
-        total: totalCount || 0,
-        activeEmployees: activeEmployees || 0,
-      } as DashboardStats;
+        overdue: Number(s.overdue ?? 0),
+        total: Number(s.total ?? 0),
+        activeEmployees: Number(s.active_employees ?? 0),
+        totalOutstanding: s.total_outstanding ?? null,
+        unpricedDeliveredCount: Number(s.unpriced_delivered_count ?? 0),
+        deliveredWithoutDentistCount: Number(s.delivered_without_dentist_count ?? 0),
+      };
     },
     refetchInterval: 30000, // Refresh every 30 seconds
+  });
+}
+
+// ---- Late-case alerts (migration 013: owner + receptionist only, Cairo date) ----
+
+export function useLateCases(enabled = true) {
+  return useQuery({
+    queryKey: ['late-cases'],
+    enabled,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_late_cases');
+      if (error) throw error;
+      return (data ?? []) as LateCase[];
+    },
+  });
+}
+
+export function useLateCaseCounts(enabled = true) {
+  return useQuery({
+    queryKey: ['late-cases', 'counts'],
+    enabled,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_late_case_counts');
+      if (error) throw error;
+      const row = (Array.isArray(data) ? data[0] : data) as LateCaseCounts | undefined;
+      return { late_count: Number(row?.late_count ?? 0), today_count: Number(row?.today_count ?? 0) };
+    },
+  });
+}
+
+// ---- Prices, discounts, opening balances, payments (migrations 015/016) ----
+// Owner + receptionist only (RLS). Amounts are sent as decimal strings ("1500.00")
+// and displayed as returned; balances and totals come from the database.
+
+const MONEY_QUERY_KEYS = [
+  'price-list', 'dentist-discounts', 'opening-balances', 'dentist-balances',
+  'dentist-statement', 'case-balance', 'payments', 'dashboard-stats',
+];
+
+function invalidateMoney(queryClient: ReturnType<typeof useQueryClient>) {
+  for (const key of MONEY_QUERY_KEYS) queryClient.invalidateQueries({ queryKey: [key] });
+}
+
+export function usePriceList(enabled = true) {
+  return useQuery({
+    queryKey: ['price-list'],
+    enabled,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('price_list').select('*');
+      if (error) throw error;
+      return (data ?? []) as PriceListEntry[];
+    },
+  });
+}
+
+export function useSetPrice() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ work_type_id, price }: { work_type_id: string; price: string }) => {
+      const { error } = await supabase.from('price_list').upsert({ work_type_id, price }, { onConflict: 'work_type_id' });
+      if (error) throw error;
+    },
+    onSuccess: () => invalidateMoney(queryClient),
+  });
+}
+
+export function useDentistDiscounts(enabled = true) {
+  return useQuery({
+    queryKey: ['dentist-discounts'],
+    enabled,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('dentist_discounts').select('*');
+      if (error) throw error;
+      return (data ?? []) as DentistDiscount[];
+    },
+  });
+}
+
+export function useSetDiscount() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ dentist_id, discount_percent }: { dentist_id: string; discount_percent: string }) => {
+      const { error } = await supabase
+        .from('dentist_discounts')
+        .upsert({ dentist_id, discount_percent }, { onConflict: 'dentist_id' });
+      if (error) throw error;
+    },
+    onSuccess: () => invalidateMoney(queryClient),
+  });
+}
+
+export function useOpeningBalances(enabled = true) {
+  return useQuery({
+    queryKey: ['opening-balances'],
+    enabled,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('dentist_opening_balances').select('*');
+      if (error) throw error;
+      return (data ?? []) as DentistOpeningBalance[];
+    },
+  });
+}
+
+export function useSetOpeningBalance() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (row: { dentist_id: string; amount: string; as_of: string; note: string | null }) => {
+      const { error } = await supabase.from('dentist_opening_balances').upsert(row, { onConflict: 'dentist_id' });
+      if (error) throw error;
+    },
+    onSuccess: () => invalidateMoney(queryClient),
+  });
+}
+
+export function useDeleteOpeningBalance() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (dentistId: string) => {
+      const { error } = await supabase.from('dentist_opening_balances').delete().eq('dentist_id', dentistId);
+      if (error) throw error;
+    },
+    onSuccess: () => invalidateMoney(queryClient),
+  });
+}
+
+export function useDentistBalances() {
+  return useQuery({
+    queryKey: ['dentist-balances'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_dentist_balances');
+      if (error) throw error;
+      return (data ?? []) as DentistBalance[];
+    },
+  });
+}
+
+export function useDentistStatement(dentistId: string | undefined, from: string, to: string) {
+  return useQuery({
+    queryKey: ['dentist-statement', dentistId, from, to],
+    enabled: !!dentistId && !!from && !!to && from <= to,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_dentist_statement', {
+        p_dentist_id: dentistId,
+        p_from: from,
+        p_to: to,
+      });
+      if (error) throw error;
+      return data as DentistStatement;
+    },
+  });
+}
+
+/** This doctor's cases a payment can be recorded against (not cancelled). */
+export function useDentistCases(dentistId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ['cases', 'for-payment', dentistId],
+    enabled: enabled && !!dentistId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('cases')
+        .select('id, case_number, patient_name, current_status')
+        .eq('dentist_id', dentistId!)
+        .neq('current_status', 'cancelled')
+        .order('created_at', { ascending: false })
+        .range(0, 199);
+      if (error) throw error;
+      return (data ?? []) as Pick<Case, 'id' | 'case_number' | 'patient_name' | 'current_status'>[];
+    },
+  });
+}
+
+export function useCaseBalance(caseId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ['case-balance', caseId],
+    enabled: enabled && !!caseId,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_case_balance', { p_case_id: caseId });
+      if (error) throw error;
+      return ((Array.isArray(data) ? data[0] : data) ?? null) as CaseBalance | null;
+    },
+  });
+}
+
+/** Owner: set this case's own price (becomes 'manual' in the database, audited). */
+export function useUpdateCaseCharge() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ case_id, list_price, discount_percent }: { case_id: string; list_price: string; discount_percent: string }) => {
+      const { error } = await supabase
+        .from('case_charges')
+        .update({ list_price, discount_percent })
+        .eq('case_id', case_id);
+      if (error) throw error;
+    },
+    onSuccess: () => invalidateMoney(queryClient),
+  });
+}
+
+export interface RecordPaymentInput {
+  /** Generated once when the dialog opens (see src/lib/payments.ts). */
+  id: string;
+  dentist_id: string;
+  case_id: string | null;
+  amount: string;
+  method: PaymentMethod;
+  note: string | null;
+}
+
+export function useRecordPayment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payment: RecordPaymentInput): Promise<{ amount: Money | string; duplicate: boolean }> => {
+      const { error } = await supabase.from('payments').insert(payment);
+      if (!error) return { amount: payment.amount, duplicate: false };
+      if (!isDuplicatePaymentId(error)) throw error;
+      // Same id already stored: an earlier attempt went through. Not a second payment;
+      // read it back so the user sees what is actually saved.
+      const { data, error: readError } = await supabase.from('payments').select('amount').eq('id', payment.id).single();
+      if (readError) throw readError;
+      return { amount: (data as { amount: Money }).amount, duplicate: true };
+    },
+    onSuccess: () => invalidateMoney(queryClient),
+  });
+}
+
+export function useReversePayment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ reverses_payment_id, amount, note }: { reverses_payment_id: string; amount: string; note: string | null }) => {
+      const { error } = await supabase.from('payments').insert({ reverses_payment_id, amount, note });
+      if (error) throw error;
+    },
+    onSuccess: () => invalidateMoney(queryClient),
   });
 }

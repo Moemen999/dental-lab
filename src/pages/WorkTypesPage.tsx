@@ -1,6 +1,13 @@
 import { useState, type FormEvent } from 'react';
 import { useWorkTypes, useCreateWorkType, useUpdateWorkType } from '@/hooks/useSupabase';
 import { Button } from '@/components/ui/Button';
+import {
+  MobileList,
+  MobileListItem,
+  MobileItemHeader,
+  MobileActions,
+  DesktopTable,
+} from '@/components/ui/ResponsiveList';
 import { Input } from '@/components/ui/Input';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -114,11 +121,65 @@ export function WorkTypesPage() {
     }
   };
 
+  // Same buttons in the phone card (44px) and the table row (compact).
+  const size = (mobile: boolean) => (mobile ? 'default' : 'sm');
+  const renderMoveButtons = (index: number, mobile: boolean) => (
+    <>
+      <Button
+        variant={mobile ? 'outline' : 'ghost'}
+        size={size(mobile)}
+        disabled={busy || index === 0}
+        onClick={() => handleMove(index, -1)}
+        title={t('workTypes.moveUp')}
+        aria-label={t('workTypes.moveUp')}
+      >
+        <ArrowUp className="h-4 w-4" aria-hidden="true" />
+      </Button>
+      <Button
+        variant={mobile ? 'outline' : 'ghost'}
+        size={size(mobile)}
+        disabled={busy || index === types.length - 1}
+        onClick={() => handleMove(index, 1)}
+        title={t('workTypes.moveDown')}
+        aria-label={t('workTypes.moveDown')}
+      >
+        <ArrowDown className="h-4 w-4" aria-hidden="true" />
+      </Button>
+    </>
+  );
+  const renderEditButtons = (w: WorkType, mobile: boolean) => (
+    <>
+      <Button
+        variant={mobile ? 'outline' : 'ghost'}
+        size={size(mobile)}
+        disabled={busy}
+        onClick={() => {
+          setRenaming(w);
+          setRenameValue(w.name);
+        }}
+        title={mobile ? undefined : t('workTypes.rename')}
+        aria-label={mobile ? undefined : t('workTypes.rename')}
+      >
+        <Edit2 className="h-3.5 w-3.5" aria-hidden="true" />
+        {mobile && t('workTypes.rename')}
+      </Button>
+      <Button
+        variant="outline"
+        size={size(mobile)}
+        className={mobile ? undefined : 'text-xs'}
+        disabled={busy}
+        onClick={() => handleToggle(w)}
+      >
+        {w.is_active ? t('common.actions.deactivate') : t('common.actions.activate')}
+      </Button>
+    </>
+  );
+
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <ListChecks className="h-6 w-6 text-brand-teal" />
+        <h1 id="work-types-title" className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <ListChecks className="h-6 w-6 text-brand-teal" aria-hidden="true" />
           {t('workTypes.title')}
         </h1>
         <p className="text-sm text-slate-500">{t('workTypes.subtitle')}</p>
@@ -159,6 +220,24 @@ export function WorkTypesPage() {
               description={t('workTypes.empty.description')}
             />
           ) : (
+            <>
+            <MobileList aria-labelledby="work-types-title">
+              {types.map((w, index) => (
+                <MobileListItem key={w.id} className={w.is_active ? undefined : 'bg-slate-50 text-slate-500'}>
+                  <MobileItemHeader>
+                    <AutoDir className="min-w-0 break-words font-medium">{w.name}</AutoDir>
+                    <Badge variant={w.is_active ? 'success' : 'secondary'}>
+                      {w.is_active ? t('common.labels.active') : t('common.labels.inactive')}
+                    </Badge>
+                  </MobileItemHeader>
+                  <MobileActions>
+                    {renderMoveButtons(index, true)}
+                    {renderEditButtons(w, true)}
+                  </MobileActions>
+                </MobileListItem>
+              ))}
+            </MobileList>
+            <DesktopTable>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -172,28 +251,7 @@ export function WorkTypesPage() {
                 {types.map((w, index) => (
                   <TableRow key={w.id} className={w.is_active ? '' : 'bg-slate-50 text-slate-500'}>
                     <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={busy || index === 0}
-                          onClick={() => handleMove(index, -1)}
-                          title={t('workTypes.moveUp')}
-                          aria-label={t('workTypes.moveUp')}
-                        >
-                          <ArrowUp className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={busy || index === types.length - 1}
-                          onClick={() => handleMove(index, 1)}
-                          title={t('workTypes.moveDown')}
-                          aria-label={t('workTypes.moveDown')}
-                        >
-                          <ArrowDown className="h-4 w-4" />
-                        </Button>
-                      </div>
+                      <div className="flex items-center gap-1">{renderMoveButtons(index, false)}</div>
                     </TableCell>
                     <TableCell className="font-medium">
                       <AutoDir>{w.name}</AutoDir>
@@ -204,29 +262,14 @@ export function WorkTypesPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-end">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={busy}
-                          onClick={() => {
-                            setRenaming(w);
-                            setRenameValue(w.name);
-                          }}
-                          title={t('workTypes.rename')}
-                          aria-label={t('workTypes.rename')}
-                        >
-                          <Edit2 className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button variant="outline" size="sm" className="text-xs" disabled={busy} onClick={() => handleToggle(w)}>
-                          {w.is_active ? t('common.actions.deactivate') : t('common.actions.activate')}
-                        </Button>
-                      </div>
+                      <div className="flex items-center justify-end gap-1">{renderEditButtons(w, false)}</div>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+            </DesktopTable>
+            </>
           )}
         </CardContent>
       </Card>

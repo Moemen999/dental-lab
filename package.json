@@ -12,7 +12,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:db": "vitest run src/test/db"
+    "test:db": "vitest run src/test/db",
+    "test:backup": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/backup/tests/test-units.ps1 && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/backup/tests/test-end-to-end.ps1",
+    "test:backup:install": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/backup/tests/test-install-verify.ps1"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

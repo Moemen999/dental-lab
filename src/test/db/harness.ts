@@ -106,6 +106,13 @@ export interface AttemptResult<T> {
   ok: boolean;
   rows: T[];
   error?: string;
+  /** Stable error key from `RAISE ... USING HINT = 'err.…'` (migration 003+). */
+  hint?: string;
+}
+
+function errorHint(e: unknown): string | undefined {
+  const hint = (e as { hint?: unknown } | null)?.hint;
+  return typeof hint === 'string' ? hint : undefined;
 }
 
 async function applyCaller(tx: Transaction, caller: Caller) {
@@ -137,7 +144,7 @@ export async function attempt<T = Record<string, unknown>>(
       if (!keep) await tx.rollback();
     });
   } catch (e) {
-    result = { ok: false, rows: [], error: e instanceof Error ? e.message : String(e) };
+    result = { ok: false, rows: [], error: e instanceof Error ? e.message : String(e), hint: errorHint(e) };
   }
   return result;
 }
@@ -211,6 +218,27 @@ export async function seedWorkType(db: PGlite, name: string, isActive = true): P
     [name, isActive],
   );
   return r.rows[0].id;
+}
+
+/** True when a column exists (lets older test files run before a migration is applied). */
+export async function columnExists(db: PGlite, table: string, column: string): Promise<boolean> {
+  const r = await db.query(
+    `SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2`,
+    [table, column],
+  );
+  return r.rows.length > 0;
+}
+
+/**
+ * Extra INSERT column/value for a case registered from the app: from migration 014
+ * a new case needs at least one jaw. Empty before 014 so older test files still run.
+ * Usage: `INSERT INTO cases (patient_name, case_type${jaw.col}) VALUES ('x', 'y'${jaw.val})`
+ */
+export async function appCaseJaw(db: PGlite): Promise<{ col: string; val: string }> {
+  return (await columnExists(db, 'cases', 'upper_jaw'))
+    ? { col: ', upper_jaw', val: ', true' }
+    : { col: '', val: '' };
 }
 
 /** True when a trigger exists (lets older test files run before a migration is applied). */

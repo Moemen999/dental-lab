@@ -8,7 +8,16 @@ import {
   useUpdateCaseStatus,
   type CaseFilters,
 } from '@/hooks/useSupabase';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonVariants } from '@/components/ui/Button';
+import {
+  MobileList,
+  MobileListItem,
+  MobileItemHeader,
+  MobileFields,
+  MobileField,
+  MobileActions,
+  DesktopTable,
+} from '@/components/ui/ResponsiveList';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -16,7 +25,8 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Pagination } from '@/components/ui/Pagination';
-import { AutoDir, CaseNumber, Ltr } from '@/components/ui/Bidi';
+import { AutoDir, CaseNumber } from '@/components/ui/Bidi';
+import { JawText, LegacySpecsLine } from '@/components/CaseJawSpecs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/Dialog';
 import {
   Table,
@@ -32,18 +42,71 @@ import {
   PRIORITY_COLORS,
   transitionsForRole,
   caseTypeLabel,
-  shadeLabel,
   type Case,
   type CaseStatus,
   type CasePriority,
 } from '@/types/database';
-import { formatDate, isOverdue } from '@/lib/utils';
+import { cn, formatDate, isOverdue } from '@/lib/utils';
 import { Plus, Search, UserCheck, Eye, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { t } from '@/i18n';
 import { tx } from '@/i18n/rich';
 import { errorMessage } from '@/i18n/errors';
 import { usePageTitle } from '@/hooks/usePageTitle';
+
+function PriorityPill({ priority }: { priority: CasePriority }) {
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${PRIORITY_COLORS[priority]}`}>
+      {PRIORITY_LABELS[priority]}
+    </span>
+  );
+}
+
+function DentistClinic({ c }: { c: Case }) {
+  return (
+    <>
+      <div className="text-slate-900">
+        <AutoDir>{c.dentist?.name || c.dentist_name_text || '—'}</AutoDir>
+      </div>
+      {(c.dentist?.clinic_name || c.clinic_name_text) && (
+        <div className="text-xs text-slate-500">
+          <AutoDir>{c.dentist?.clinic_name || c.clinic_name_text}</AutoDir>
+        </div>
+      )}
+    </>
+  );
+}
+
+function TypeDetails({ c }: { c: Case }) {
+  return (
+    <>
+      <div className="text-slate-900 font-medium">{caseTypeLabel(c.case_type)}</div>
+      <JawText value={c} className="block text-xs font-medium text-slate-700" />
+      <LegacySpecsLine value={c} className="block text-xs" />
+    </>
+  );
+}
+
+function TechnicianName({ c }: { c: Case }) {
+  return c.assigned_technician ? (
+    <span className="text-sm text-slate-800">
+      <AutoDir>{c.assigned_technician.full_name}</AutoDir>
+    </span>
+  ) : (
+    <span className="text-xs text-slate-500">{t('common.labels.unassigned')}</span>
+  );
+}
+
+function DueDate({ c, overdue }: { c: Case; overdue: boolean }) {
+  return c.due_date ? (
+    <div className={`text-sm whitespace-nowrap ${overdue ? 'text-red-600 font-semibold' : 'text-slate-700'}`}>
+      {formatDate(c.due_date)}
+      {overdue && <span className="block text-xs font-bold text-red-700">{t('common.labels.overdue')}</span>}
+    </div>
+  ) : (
+    <span className="text-xs text-slate-500">—</span>
+  );
+}
 
 export function CasesPage() {
   usePageTitle(t('layout.nav.cases'));
@@ -133,12 +196,22 @@ export function CasesPage() {
     label: t('cases.list.technicianOption', { name: tech.full_name, email: tech.email }),
   }));
 
+  // Shared by the phone card list and the table, so both open the same dialogs.
+  const openAssign = (c: Case) => {
+    setAssignModalCase(c);
+    setSelectedTechnicianId(c.assigned_technician_id || '');
+  };
+  const openStatus = (c: Case, validTransitions: CaseStatus[]) => {
+    setStatusModalCase(c);
+    setNewStatus(validTransitions[0]);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{t('cases.list.title')}</h1>
+          <h1 id="cases-title" className="text-2xl font-bold text-slate-900">{t('cases.list.title')}</h1>
           <p className="text-sm text-slate-500">{t('cases.list.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -147,11 +220,9 @@ export function CasesPage() {
             {t('common.actions.refresh')}
           </Button>
           {canRegister && (
-            <Link to="/cases/new">
-              <Button size="sm">
-                <Plus className="h-4 w-4 me-1" />
-                {t('cases.list.newCase')}
-              </Button>
+            <Link to="/cases/new" className={buttonVariants({ size: 'sm' })}>
+              <Plus className="h-4 w-4 me-1" aria-hidden="true" />
+              {t('cases.list.newCase')}
             </Link>
           )}
         </div>
@@ -280,7 +351,63 @@ export function CasesPage() {
               onAction={canRegister ? () => window.location.assign('/cases/new') : undefined}
             />
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Phones (below md): one card per case instead of a table wider than the screen. */}
+            <MobileList aria-labelledby="cases-title">
+              {cases.map((c) => {
+                const overdue = isOverdue(c.due_date, c.current_status);
+                const validTransitions = transitionsForRole(profile?.role, c.current_status);
+
+                return (
+                  <MobileListItem key={c.id}>
+                    <MobileItemHeader>
+                      <Link
+                        to={`/cases/${c.id}`}
+                        className="text-sm font-semibold text-brand-teal hover:text-brand-teal-hover hover:underline"
+                      >
+                        <CaseNumber value={c.case_number} />
+                      </Link>
+                      <StatusBadge status={c.current_status} />
+                    </MobileItemHeader>
+                    <MobileFields>
+                      <MobileField label={t('common.labels.patient')}>
+                        <div className="font-medium text-slate-900"><AutoDir>{c.patient_name}</AutoDir></div>
+                        {c.patient_age !== null && (
+                          <div className="text-xs text-slate-500">{t('common.labels.age', { value: c.patient_age })}</div>
+                        )}
+                      </MobileField>
+                      <MobileField label={t('cases.list.columns.dentistClinic')}><DentistClinic c={c} /></MobileField>
+                      <MobileField label={t('cases.list.columns.typeDetails')}><TypeDetails c={c} /></MobileField>
+                      <MobileField label={t('common.labels.priority')}><PriorityPill priority={c.priority} /></MobileField>
+                      <MobileField label={t('cases.list.columns.assignedTech')}><TechnicianName c={c} /></MobileField>
+                      <MobileField label={t('common.labels.dueDate')}><DueDate c={c} overdue={overdue} /></MobileField>
+                    </MobileFields>
+                    <MobileActions>
+                      <Link
+                        to={`/cases/${c.id}`}
+                        className={cn(buttonVariants({ variant: 'outline' }), 'text-brand-teal')}
+                      >
+                        <Eye className="h-4 w-4" aria-hidden="true" />
+                        {t('common.actions.viewDetails')}
+                      </Link>
+                      {canAssign && (
+                        <Button variant="outline" onClick={() => openAssign(c)}>
+                          <UserCheck className="h-4 w-4" aria-hidden="true" />
+                          {t('cases.list.assignTechnician')}
+                        </Button>
+                      )}
+                      {validTransitions.length > 0 && (
+                        <Button variant="secondary" onClick={() => openStatus(c, validTransitions)}>
+                          {t('cases.list.updateStatus')}
+                        </Button>
+                      )}
+                    </MobileActions>
+                  </MobileListItem>
+                );
+              })}
+            </MobileList>
+
+            <DesktopTable>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -318,79 +445,31 @@ export function CasesPage() {
                             </div>
                           )}
                         </TableCell>
-                        <TableCell>
-                          <div className="text-slate-900">
-                            <AutoDir>{c.dentist?.name || c.dentist_name_text || '—'}</AutoDir>
-                          </div>
-                          {(c.dentist?.clinic_name || c.clinic_name_text) && (
-                            <div className="text-xs text-slate-500">
-                              <AutoDir>{c.dentist?.clinic_name || c.clinic_name_text}</AutoDir>
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="text-slate-900 font-medium">{caseTypeLabel(c.case_type)}</div>
-                          <div className="text-xs text-slate-500 flex flex-wrap gap-x-2">
-                            {c.tooth_number && (
-                              <span>{tx('common.labels.tooth', { value: <Ltr>{c.tooth_number}</Ltr> })}</span>
-                            )}
-                            {c.shade && (
-                              <span>{tx('common.labels.shade', { value: <Ltr>{shadeLabel(c.shade)}</Ltr> })}</span>
-                            )}
-                          </div>
-                        </TableCell>
+                        <TableCell><DentistClinic c={c} /></TableCell>
+                        <TableCell><TypeDetails c={c} /></TableCell>
                         <TableCell>
                           <StatusBadge status={c.current_status} />
                         </TableCell>
-                        <TableCell>
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                              PRIORITY_COLORS[c.priority]
-                            }`}
-                          >
-                            {PRIORITY_LABELS[c.priority]}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          {c.assigned_technician ? (
-                            <span className="text-sm text-slate-800">
-                              <AutoDir>{c.assigned_technician.full_name}</AutoDir>
-                            </span>
-                          ) : (
-                            <span className="text-xs text-slate-500">{t('common.labels.unassigned')}</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {c.due_date ? (
-                            <div className={`text-sm whitespace-nowrap ${overdue ? 'text-red-600 font-semibold' : 'text-slate-700'}`}>
-                              {formatDate(c.due_date)}
-                              {overdue && <span className="block text-xs font-bold text-red-700">{t('common.labels.overdue')}</span>}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-slate-500">—</span>
-                          )}
-                        </TableCell>
+                        <TableCell><PriorityPill priority={c.priority} /></TableCell>
+                        <TableCell><TechnicianName c={c} /></TableCell>
+                        <TableCell><DueDate c={c} overdue={overdue} /></TableCell>
                         <TableCell className="text-end">
                           <div className="flex items-center justify-end gap-1">
-                            <Link to={`/cases/${c.id}`}>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                title={t('common.actions.viewDetails')}
-                                aria-label={t('common.actions.viewDetails')}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
+                            {/* One interactive element (a link styled as a button), not a button inside a link. */}
+                            <Link
+                              to={`/cases/${c.id}`}
+                              className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+                              title={t('common.actions.viewDetails')}
+                              aria-label={t('common.actions.viewDetails')}
+                            >
+                              <Eye className="h-4 w-4" aria-hidden="true" />
                             </Link>
 
                             {canAssign && (
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => {
-                                  setAssignModalCase(c);
-                                  setSelectedTechnicianId(c.assigned_technician_id || '');
-                                }}
+                                onClick={() => openAssign(c)}
                                 title={t('cases.list.assignTechnician')}
                                 aria-label={t('cases.list.assignTechnician')}
                               >
@@ -402,10 +481,7 @@ export function CasesPage() {
                               <Button
                                 variant="secondary"
                                 size="sm"
-                                onClick={() => {
-                                  setStatusModalCase(c);
-                                  setNewStatus(validTransitions[0]);
-                                }}
+                                onClick={() => openStatus(c, validTransitions)}
                                 title={t('cases.list.updateStatus')}
                               >
                                 {t('cases.list.statusButton')}
@@ -418,7 +494,8 @@ export function CasesPage() {
                   })}
                 </TableBody>
               </Table>
-            </div>
+            </DesktopTable>
+            </>
           )}
 
           {/* Pagination */}

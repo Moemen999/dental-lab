@@ -108,8 +108,20 @@
 }
 
 /* Print styles */
+/* Print: A4, white page; app chrome uses print:hidden (doctor statement). */
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
 @media print {
   .no-print {
     display: none !important;
+  }
+
+  body {
+    background: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }

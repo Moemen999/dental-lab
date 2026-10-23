@@ -88,6 +88,11 @@ export const enums = {
     case: 'حالة',
     settings: 'إعدادات',
     work_type: 'نوع شغل',
+    price: 'سعر نوع شغل',
+    dentist_discount: 'خصم طبيب',
+    case_price: 'سعر حالة',
+    payment: 'دفعة',
+    opening_balance: 'رصيد افتتاحي',
   },
   // LEGACY: prosthetic types stored in English before migration 005. Kept only so old
   // cases still display in Arabic. New work types are managed by the owner (work_types).
@@ -109,7 +114,14 @@ export const enums = {
     'Post and Core': 'وتد ودعامة (بوست آند كور)',
     Other: 'أخرى',
   },
+  /** Legacy shade values (cases before migration 014). */
   shade: {
     Custom: 'لون مخصص',
+  },
+  /** Jaw of a case (migration 014). */
+  jaw: {
+    upper: 'فك علوي',
+    lower: 'فك سفلي',
+    both: 'الفك العلوي والسفلي',
   },
 };

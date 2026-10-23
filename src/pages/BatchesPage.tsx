@@ -10,6 +10,15 @@ import {
   useCases,
 } from '@/hooks/useSupabase';
 import { Button } from '@/components/ui/Button';
+import {
+  MobileList,
+  MobileListItem,
+  MobileItemHeader,
+  MobileFields,
+  MobileField,
+  MobileActions,
+  DesktopTable,
+} from '@/components/ui/ResponsiveList';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Textarea } from '@/components/ui/Textarea';
@@ -52,6 +61,60 @@ import { t } from '@/i18n';
 import { tx } from '@/i18n/rich';
 import { errorMessage } from '@/i18n/errors';
 import { usePageTitle } from '@/hooks/usePageTitle';
+
+function Representative({ b }: { b: DeliveryBatch }) {
+  return b.representative?.full_name ? (
+    <AutoDir>{b.representative.full_name}</AutoDir>
+  ) : (
+    <span className="text-slate-500 text-xs">{t('common.labels.unassigned')}</span>
+  );
+}
+
+function BatchCounts({ b }: { b: DeliveryBatch }) {
+  const hasDiscrepancy = b.expected_count !== null && b.actual_count !== b.expected_count;
+  return (
+    // actual / expected, kept left-to-right like a fraction
+    <div className="flex items-center gap-1.5 text-sm">
+      <Ltr className="inline-flex items-center gap-1.5">
+        <span className="font-medium text-slate-900">{b.actual_count}</span>
+        <span className="text-slate-500">/</span>
+        <span className="text-slate-600">
+          {b.expected_count !== null ? b.expected_count : '—'}
+        </span>
+      </Ltr>
+      {hasDiscrepancy && b.status !== 'open' && (
+        <span title={t('batches.countDiscrepancy')}>
+          <AlertTriangle className="h-4 w-4 text-amber-500" aria-label={t('batches.countDiscrepancy')} />
+        </span>
+      )}
+    </div>
+  );
+}
+
+function BatchStatusPill({ status }: { status: BatchStatus }) {
+  if (status === 'open') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+        <Clock className="h-3 w-3" />
+        {BATCH_STATUS_LABELS.open}
+      </span>
+    );
+  }
+  if (status === 'closed') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800">
+        <CheckCircle className="h-3 w-3" />
+        {BATCH_STATUS_LABELS.closed}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+      <AlertTriangle className="h-3 w-3" />
+      {BATCH_STATUS_LABELS.discrepancy}
+    </span>
+  );
+}
 
 export function BatchesPage() {
   usePageTitle(t('batches.title'));
@@ -189,7 +252,7 @@ export function BatchesPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{t('batches.title')}</h1>
+          <h1 id="batches-title" className="text-2xl font-bold text-slate-900">{t('batches.title')}</h1>
           <p className="text-sm text-slate-500">{t('batches.subtitle')}</p>
         </div>
         {canManage && (
@@ -269,7 +332,34 @@ export function BatchesPage() {
               onAction={canManage ? handleOpenCreateModal : undefined}
             />
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            <MobileList aria-labelledby="batches-title">
+              {batches.map((b) => (
+                <MobileListItem key={b.id}>
+                  <MobileItemHeader>
+                    <Ltr className="font-mono text-sm font-semibold text-slate-900 whitespace-nowrap">{b.batch_reference}</Ltr>
+                    <Badge variant={b.batch_type === 'intake' ? 'secondary' : 'default'}>
+                      {BATCH_TYPE_LABELS[b.batch_type]}
+                    </Badge>
+                  </MobileItemHeader>
+                  <MobileFields>
+                    <MobileField label={t('common.labels.representative')}><Representative b={b} /></MobileField>
+                    <MobileField label={t('batches.columns.expectedActual')}><BatchCounts b={b} /></MobileField>
+                    <MobileField label={t('common.labels.status')}><BatchStatusPill status={b.status} /></MobileField>
+                    <MobileField label={t('batches.columns.handoffDate')} className="whitespace-nowrap text-slate-600">
+                      {formatDate(b.handoff_at)}
+                    </MobileField>
+                  </MobileFields>
+                  <MobileActions>
+                    <Button variant="secondary" onClick={() => setSelectedBatch(b)}>
+                      <Layers className="h-4 w-4" aria-hidden="true" />
+                      {t('batches.manageCases')}
+                    </Button>
+                  </MobileActions>
+                </MobileListItem>
+              ))}
+            </MobileList>
+            <DesktopTable>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -283,83 +373,38 @@ export function BatchesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {batches.map((b) => {
-                    const hasDiscrepancy =
-                      b.expected_count !== null && b.actual_count !== b.expected_count;
-
-                    return (
-                      <TableRow key={b.id}>
-                        <TableCell className="font-mono font-semibold text-slate-900 whitespace-nowrap">
-                          <Ltr>{b.batch_reference}</Ltr>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={b.batch_type === 'intake' ? 'secondary' : 'default'}>
-                            {BATCH_TYPE_LABELS[b.batch_type]}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {b.representative?.full_name ? (
-                            <AutoDir>{b.representative.full_name}</AutoDir>
-                          ) : (
-                            <span className="text-slate-500 text-xs">{t('common.labels.unassigned')}</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {/* actual / expected, kept left-to-right like a fraction */}
-                          <div className="flex items-center gap-1.5 text-sm">
-                            <Ltr className="inline-flex items-center gap-1.5">
-                              <span className="font-medium text-slate-900">{b.actual_count}</span>
-                              <span className="text-slate-500">/</span>
-                              <span className="text-slate-600">
-                                {b.expected_count !== null ? b.expected_count : '—'}
-                              </span>
-                            </Ltr>
-                            {hasDiscrepancy && b.status !== 'open' && (
-                              <span title={t('batches.countDiscrepancy')}>
-                                <AlertTriangle className="h-4 w-4 text-amber-500" aria-label={t('batches.countDiscrepancy')} />
-                              </span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {b.status === 'open' && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
-                              <Clock className="h-3 w-3" />
-                              {BATCH_STATUS_LABELS.open}
-                            </span>
-                          )}
-                          {b.status === 'closed' && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800">
-                              <CheckCircle className="h-3 w-3" />
-                              {BATCH_STATUS_LABELS.closed}
-                            </span>
-                          )}
-                          {b.status === 'discrepancy' && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
-                              <AlertTriangle className="h-3 w-3" />
-                              {BATCH_STATUS_LABELS.discrepancy}
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-sm text-slate-600 whitespace-nowrap">
-                          {formatDate(b.handoff_at)}
-                        </TableCell>
-                        <TableCell className="text-end">
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => setSelectedBatch(b)}
-                          >
-                            <Layers className="h-4 w-4 me-1" />
-                            {t('batches.manageCases')}
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {batches.map((b) => (
+                    <TableRow key={b.id}>
+                      <TableCell className="font-mono font-semibold text-slate-900 whitespace-nowrap">
+                        <Ltr>{b.batch_reference}</Ltr>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={b.batch_type === 'intake' ? 'secondary' : 'default'}>
+                          {BATCH_TYPE_LABELS[b.batch_type]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell><Representative b={b} /></TableCell>
+                      <TableCell><BatchCounts b={b} /></TableCell>
+                      <TableCell><BatchStatusPill status={b.status} /></TableCell>
+                      <TableCell className="text-sm text-slate-600 whitespace-nowrap">
+                        {formatDate(b.handoff_at)}
+                      </TableCell>
+                      <TableCell className="text-end">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setSelectedBatch(b)}
+                        >
+                          <Layers className="h-4 w-4 me-1" />
+                          {t('batches.manageCases')}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
-            </div>
+            </DesktopTable>
+            </>
           )}
 
           {totalPages > 1 && (
@@ -459,8 +504,9 @@ export function BatchesPage() {
               ) : (
                 <div className="max-h-60 overflow-y-auto border rounded-lg divide-y text-xs">
                   {(batchCases as Array<{ id: string; case?: Case | null }>).map((bc) => (
-                    <div key={bc.id} className="p-2.5 flex items-center justify-between gap-2 hover:bg-slate-50">
-                      <div className="min-w-0">
+                    <div key={bc.id} className="p-2.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 hover:bg-slate-50">
+                      {/* basis-36 is wider than the unbroken case number, so the badge wraps below instead of overlapping. */}
+                      <div className="min-w-0 flex-1 basis-36">
                         <span className="font-semibold text-slate-900 block">
                           <CaseNumber value={bc.case?.case_number} />
                         </span>

@@ -10,6 +10,15 @@ import {
   useResetUserPassword,
 } from '@/hooks/useSupabase';
 import { Button } from '@/components/ui/Button';
+import {
+  MobileList,
+  MobileListItem,
+  MobileItemHeader,
+  MobileFields,
+  MobileField,
+  MobileActions,
+  DesktopTable,
+} from '@/components/ui/ResponsiveList';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -41,7 +50,7 @@ import {
   type AccountStatus,
 } from '@/types/database';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { formatDate } from '@/lib/utils';
+import { cn, formatDate } from '@/lib/utils';
 import {
   Search,
   UserCog,
@@ -56,6 +65,29 @@ import { t } from '@/i18n';
 import { tx } from '@/i18n/rich';
 import { errorMessage } from '@/i18n/errors';
 import { usePageTitle } from '@/hooks/usePageTitle';
+
+function roleBadgeVariant(role: AppRole): 'default' | 'secondary' | 'outline' {
+  if (role === 'technician') return 'secondary';
+  if (role === 'receptionist') return 'outline';
+  return 'default';
+}
+
+function AccountStatusBadge({ status }: { status: AccountStatus }) {
+  if (status === 'active') return <Badge variant="success">{ACCOUNT_STATUS_LABELS.active}</Badge>;
+  if (status === 'inactive') return <Badge variant="destructive">{ACCOUNT_STATUS_LABELS.inactive}</Badge>;
+  return <Badge variant="secondary">{ACCOUNT_STATUS_LABELS.pending_invitation}</Badge>;
+}
+
+function PhoneLine({ u }: { u: Profile }) {
+  return u.phone ? (
+    <div className="flex items-center gap-1 text-xs text-slate-600">
+      <Phone className="h-3 w-3 shrink-0 text-slate-500" aria-hidden="true" />
+      <Ltr className="whitespace-nowrap">{u.phone}</Ltr>
+    </div>
+  ) : (
+    <span className="text-xs text-slate-500">—</span>
+  );
+}
 
 export function EmployeesPage() {
   usePageTitle(t('employees.title'));
@@ -248,12 +280,70 @@ export function EmployeesPage() {
     return matchesSearch;
   });
 
+  // Same buttons in the phone card (labelled, 44px) and the table row (compact icons).
+  const renderActions = (u: Profile, mobile: boolean) => {
+    const isSelf = u.id === currentProfile?.id;
+    const isLastOwner =
+      u.role === 'owner' &&
+      activeOwners.length <= 1 &&
+      activeOwners[0]?.id === u.id;
+    const size = mobile ? 'default' : 'sm';
+
+    return (
+      <>
+        <Button
+          variant={mobile ? 'outline' : 'ghost'}
+          size={size}
+          onClick={() => handleResetPassword(u)}
+          title={mobile ? undefined : t('employees.resetPassword')}
+          aria-label={mobile ? undefined : t('employees.resetPassword')}
+        >
+          <KeyRound className="h-4 w-4 text-slate-500" aria-hidden="true" />
+          {mobile && t('employees.resetPassword')}
+        </Button>
+
+        <Button
+          variant={mobile ? 'outline' : 'ghost'}
+          size={size}
+          onClick={() => openEditDialog(u)}
+          title={mobile ? undefined : t('employees.editRoleStatus')}
+          aria-label={mobile ? undefined : t('employees.editRoleStatus')}
+        >
+          <UserCog className="h-4 w-4" aria-hidden="true" />
+          {mobile && t('employees.editRoleStatus')}
+        </Button>
+
+        {!isSelf && (
+          <Button
+            variant="outline"
+            size={size}
+            onClick={() => {
+              if (u.status === 'active') {
+                handleOpenDeactivation(u);
+              } else {
+                updateProfile.mutate({ id: u.id, status: 'active' });
+                toast.success(t('employees.toasts.reactivated'));
+              }
+            }}
+            disabled={isLastOwner}
+            className={cn(
+              !mobile && 'text-xs',
+              u.status === 'active' && 'hover:bg-red-50 hover:text-red-700 hover:border-red-300',
+            )}
+          >
+            {u.status === 'active' ? t('common.actions.deactivate') : t('common.actions.activate')}
+          </Button>
+        )}
+      </>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{t('employees.title')}</h1>
+          <h1 id="employees-title" className="text-2xl font-bold text-slate-900">{t('employees.title')}</h1>
           <p className="text-sm text-slate-500">{t('employees.subtitle')}</p>
         </div>
 
@@ -333,7 +423,29 @@ export function EmployeesPage() {
               description={t('employees.empty.description')}
             />
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            <MobileList aria-labelledby="employees-title">
+              {filteredUsers.map((u) => (
+                <MobileListItem key={u.id}>
+                  <MobileItemHeader>
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900"><AutoDir>{u.full_name}</AutoDir></div>
+                      <div className="text-xs text-slate-500 break-all md:break-normal"><Ltr>{u.email}</Ltr></div>
+                    </div>
+                    <Badge variant={roleBadgeVariant(u.role)}>{ROLE_LABELS[u.role]}</Badge>
+                  </MobileItemHeader>
+                  <MobileFields>
+                    <MobileField label={t('employees.columns.accountStatus')}><AccountStatusBadge status={u.status} /></MobileField>
+                    <MobileField label={t('employees.columns.contact')}><PhoneLine u={u} /></MobileField>
+                    <MobileField label={t('employees.columns.joined')} className="whitespace-nowrap text-xs text-slate-500">
+                      {formatDate(u.created_at)}
+                    </MobileField>
+                  </MobileFields>
+                  <MobileActions>{renderActions(u, true)}</MobileActions>
+                </MobileListItem>
+              ))}
+            </MobileList>
+            <DesktopTable>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -346,106 +458,33 @@ export function EmployeesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredUsers.map((u) => {
-                    let roleBadgeVariant: 'default' | 'secondary' | 'outline' | 'destructive' =
-                      'default';
-                    if (u.role === 'owner') roleBadgeVariant = 'default';
-                    else if (u.role === 'technician') roleBadgeVariant = 'secondary';
-                    else if (u.role === 'receptionist') roleBadgeVariant = 'outline';
-
-                    const isSelf = u.id === currentProfile?.id;
-                    const isLastOwner =
-                      u.role === 'owner' &&
-                      activeOwners.length <= 1 &&
-                      activeOwners[0]?.id === u.id;
-
-                    return (
-                      <TableRow key={u.id}>
-                        <TableCell>
-                          <div className="font-semibold text-slate-900"><AutoDir>{u.full_name}</AutoDir></div>
-                          <div className="text-xs text-slate-500"><Ltr>{u.email}</Ltr></div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={roleBadgeVariant}>
-                            {ROLE_LABELS[u.role]}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {u.status === 'active' && <Badge variant="success">{ACCOUNT_STATUS_LABELS.active}</Badge>}
-                          {u.status === 'inactive' && (
-                            <Badge variant="destructive">{ACCOUNT_STATUS_LABELS.inactive}</Badge>
-                          )}
-                          {u.status === 'pending_invitation' && (
-                            <Badge variant="secondary">{ACCOUNT_STATUS_LABELS.pending_invitation}</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="text-xs text-slate-600 space-y-0.5">
-                            {u.phone ? (
-                              <div className="flex items-center gap-1">
-                                <Phone className="h-3 w-3 text-slate-500" />
-                                <Ltr>{u.phone}</Ltr>
-                              </div>
-                            ) : (
-                              <span className="text-slate-500">—</span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-xs text-slate-500 whitespace-nowrap">
-                          {formatDate(u.created_at)}
-                        </TableCell>
-                        <TableCell className="text-end">
-                          <div className="flex items-center justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleResetPassword(u)}
-                              title={t('employees.resetPassword')}
-                              aria-label={t('employees.resetPassword')}
-                            >
-                              <KeyRound className="h-4 w-4 text-slate-500" />
-                            </Button>
-
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openEditDialog(u)}
-                              title={t('employees.editRoleStatus')}
-                              aria-label={t('employees.editRoleStatus')}
-                            >
-                              <UserCog className="h-4 w-4" />
-                            </Button>
-
-                            {!isSelf && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  if (u.status === 'active') {
-                                    handleOpenDeactivation(u);
-                                  } else {
-                                    updateProfile.mutate({ id: u.id, status: 'active' });
-                                    toast.success(t('employees.toasts.reactivated'));
-                                  }
-                                }}
-                                disabled={isLastOwner}
-                                className={`text-xs ${
-                                  u.status === 'active'
-                                    ? 'hover:bg-red-50 hover:text-red-700 hover:border-red-300'
-                                    : ''
-                                }`}
-                              >
-                                {u.status === 'active' ? t('common.actions.deactivate') : t('common.actions.activate')}
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {filteredUsers.map((u) => (
+                    <TableRow key={u.id}>
+                      <TableCell>
+                        <div className="font-semibold text-slate-900"><AutoDir>{u.full_name}</AutoDir></div>
+                        <div className="text-xs text-slate-500"><Ltr>{u.email}</Ltr></div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={roleBadgeVariant(u.role)}>
+                          {ROLE_LABELS[u.role]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell><AccountStatusBadge status={u.status} /></TableCell>
+                      <TableCell><PhoneLine u={u} /></TableCell>
+                      <TableCell className="text-xs text-slate-500 whitespace-nowrap">
+                        {formatDate(u.created_at)}
+                      </TableCell>
+                      <TableCell className="text-end">
+                        <div className="flex items-center justify-end gap-1">
+                          {renderActions(u, false)}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
-            </div>
+            </DesktopTable>
+            </>
           )}
         </CardContent>
       </Card>
@@ -591,10 +630,10 @@ export function EmployeesPage() {
                       {outstandingWork.active_cases.map((c) => (
                         <div
                           key={c.id}
-                          className="flex justify-between items-center gap-2 py-1 border-b last:border-b-0"
+                          className="flex flex-wrap justify-between items-center gap-x-2 gap-y-1 py-1 border-b last:border-b-0"
                         >
                           <CaseNumber value={c.case_number} className="font-medium" />
-                          <AutoDir className="text-slate-600">{c.patient_name}</AutoDir>
+                          <AutoDir className="min-w-0 flex-1 break-words text-slate-600">{c.patient_name}</AutoDir>
                           <StatusBadge status={c.current_status} />
                         </div>
                       ))}

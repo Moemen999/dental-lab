@@ -54,3 +54,9 @@ local-only/
 .agents/skills/
 .agent/skills/
 skills-lock.json
+
+# Backup secrets and keys (live in %LOCALAPPDATA%\DolphinBackup, never here)
+rclone.conf
+*.secret
+*recovery-key*
+مفتاح-استرجاع*

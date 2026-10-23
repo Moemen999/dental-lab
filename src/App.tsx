@@ -13,6 +13,10 @@ import { DentistsPage } from '@/pages/DentistsPage';
 import { EmployeesPage } from '@/pages/EmployeesPage';
 import { AuditLogsPage } from '@/pages/AuditLogsPage';
 import { WorkTypesPage } from '@/pages/WorkTypesPage';
+import { LateCasesPage } from '@/pages/LateCasesPage';
+import { PricingPage } from '@/pages/PricingPage';
+import { AccountsPage } from '@/pages/AccountsPage';
+import { StatementPage } from '@/pages/StatementPage';
 import { RepresentativeDashboard } from '@/pages/RepresentativeDashboard';
 import { Toaster } from 'sonner';
 
@@ -65,6 +69,14 @@ export function App() {
                   <Route index element={<DentistsPage />} />
                 </Route>
 
+                {/* Late and due-today cases (Owner + Receptionist; the RPCs also enforce this) */}
+                <Route
+                  path="/late-cases"
+                  element={<ProtectedRoute allowedRoles={['owner', 'receptionist']} />}
+                >
+                  <Route index element={<LateCasesPage />} />
+                </Route>
+
                 {/* Staff & Employees (Owner only) */}
                 <Route
                   path="/employees"
@@ -79,6 +91,17 @@ export function App() {
                   element={<ProtectedRoute allowedRoles={['owner']} />}
                 >
                   <Route index element={<WorkTypesPage />} />
+                </Route>
+
+                {/* Prices, discounts, opening balances (Owner only; RLS enforces it too) */}
+                <Route path="/pricing" element={<ProtectedRoute allowedRoles={['owner']} />}>
+                  <Route index element={<PricingPage />} />
+                </Route>
+
+                {/* Doctor accounts and statements (Owner + Receptionist; the RPCs enforce it too) */}
+                <Route path="/accounts" element={<ProtectedRoute allowedRoles={['owner', 'receptionist']} />}>
+                  <Route index element={<AccountsPage />} />
+                  <Route path=":dentistId" element={<StatementPage />} />
                 </Route>
 
                 {/* System Audit Logs (Owner only) */}

@@ -108,8 +108,10 @@ The principal operational entity representing an individual dental case.
 | `dentist_name_text`| TEXT | NULLABLE | Fallback doctor name |
 | `clinic_name_text` | TEXT | NULLABLE | Fallback clinic name |
 | `case_type` | TEXT | NOT NULL | Crown, Bridge, Veneer, etc. |
-| `tooth_number` | TEXT | NULLABLE | Tooth notation (e.g. #14, 21-23) |
-| `shade` | TEXT | NULLABLE | Shade guide code (A1, A2, etc.) |
+| `upper_jaw` | BOOLEAN | NULLABLE (migration 014) | Work is for the upper jaw. NULL on cases registered before 014 |
+| `lower_jaw` | BOOLEAN | NULLABLE (migration 014) | Work is for the lower jaw. NULL on cases registered before 014. A case registered from the app needs `upper_jaw` or `lower_jaw` = true (trigger `trg_validate_case_jaws`, hint `err.case.jaw_required`; checked on UPDATE only when a jaw changes; trusted sessions are not checked) |
+| `tooth_number` | TEXT | NULLABLE | Legacy (before 014): tooth notation (e.g. 14, 21-23). No longer entered; shown read-only on old cases |
+| `shade` | TEXT | NULLABLE | Legacy (before 014): shade guide code (A1, A2, etc.). No longer entered; shown read-only on old cases |
 | `description` | TEXT | NULLABLE | Prescription description |
 | `special_instructions`| TEXT | NULLABLE | Clinical guidance for ceramist |
 | `current_status` | case_status | NOT NULL, DEFAULT 'registered' | Active workflow status |
@@ -181,3 +183,101 @@ Append-only administrative security audit trail for user provisioning, role adju
 | `ip_address` | INET | NULLABLE | Caller IP address |
 | `user_agent` | TEXT | NULLABLE | Client user agent |
 | `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT now() | Server timestamp |
+
+---
+
+## 4. Pricing & Accounts (migration `015_pricing.sql`)
+
+Currency: Egyptian pound (جنيه مصري). Every amount is `numeric(12,2)` (never float). No VAT / e-invoicing.
+**Money is visible only to active owners and receptionists.** Technicians and representatives can read `cases`, `dentists` and `work_types`, so no money column was added to those tables; all money lives in the five tables below (RLS on each; anon has no privileges; technicians, representatives and inactive users see no rows). Tests: `src/test/db/pricing.test.ts`.
+
+### `price_list`
+One price per work type. Owner inserts/updates; owner + receptionist read; no delete.
+| Column | Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `work_type_id` | UUID | PRIMARY KEY, REFERENCES work_types(id) | Work type |
+| `price` | NUMERIC(12,2) | NOT NULL, >= 0 | List price (EGP) |
+| `updated_at` | TIMESTAMPTZ | NOT NULL | Set by trigger |
+| `updated_by` | UUID | REFERENCES profiles(id) | Set by trigger (`auth.uid()`) |
+
+### `dentist_discounts`
+One discount per doctor. Owner inserts/updates; owner + receptionist read; no delete (set 0 instead).
+| Column | Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `dentist_id` | UUID | PRIMARY KEY, REFERENCES dentists(id) | Doctor |
+| `discount_percent` | NUMERIC(5,2) | NOT NULL, 0–100 | Discount % |
+| `updated_at`, `updated_by` | | | Set by trigger |
+
+### `dentist_opening_balances` (optional, رصيد افتتاحي)
+What a doctor owed (or was owed) before the money module. Old deliveries are never charged case by case; the owner decides per doctor whether to enter an opening balance. Owner inserts/updates/deletes (deleting = "no opening balance"); owner + receptionist read; service role and anon cannot write. Every change is audited (`settings_changed` / `opening_balance`, `op` = `opening_set` / `opening_changed` / `opening_removed`, with old and new amount and `as_of`).
+| Column | Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `dentist_id` | UUID | PRIMARY KEY, REFERENCES dentists(id) | Doctor |
+| `amount` | NUMERIC(12,2) | NOT NULL, not 0 (016: delete the row instead) | > 0 the doctor owes the lab; < 0 credit (the lab owes the doctor) |
+| `as_of` | DATE | NOT NULL, not after today in Cairo (016) | Cairo date the balance counts on (normally the go-live date) |
+| `note` | TEXT | up to 2000 chars | |
+| `updated_at`, `updated_by` | | | Set by trigger |
+
+In a statement it is a line of kind `opening` on `as_of` (at Cairo midnight, before anything else that day): before `p_from` it is part of the opening balance, inside the period it is a line, after `p_to` it is ignored. `get_dentist_balances` (`balance`, plus `opening_balance` / `opening_as_of` columns) and `get_owner_dashboard_stats.total_outstanding` include it.
+
+### `case_charges`
+One row per case, inserted by trigger `trg_create_case_charge` (AFTER INSERT on `cases`). Owner + receptionist read; only the owner may update, and only `list_price` / `discount_percent` (column grant). No client insert or delete.
+| Column | Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `case_id` | UUID | PRIMARY KEY, REFERENCES cases(id) ON DELETE CASCADE | Case |
+| `list_price` | NUMERIC(12,2) | NULLABLE, >= 0 | Snapshot of the price list. **NULL = not priced** |
+| `discount_percent` | NUMERIC(5,2) | NOT NULL, 0–100 | Snapshot of the doctor's discount |
+| `net_amount` | NUMERIC(12,2) | GENERATED STORED | `round(list_price * (1 - discount_percent / 100), 2)` |
+| `price_source` | TEXT | `list` or `manual` | `manual` after a direct edit of this case's price |
+| `updated_at`, `updated_by` | | | Set by trigger |
+
+Snapshot rules:
+- `cases.case_type` is a text snapshot of the work type **name**; it is matched to `work_types` by `lower(btrim(name))` (active or inactive types). Legacy values (e.g. `Crown`) match nothing and stay unpriced.
+- Price list or discount changes never change an already priced charge.
+- When the owner sets a price for a work type, that type's **unpriced** `list` charges (not cancelled; delivered ones included on purpose, they become due at that price) take the price and the doctor's current discount. The price audit row lists them (`priced_cases_count`, `priced_case_ids`).
+- Changing an open case's work type or doctor re-snapshots a `list` charge (`manual` charges are kept); the change is audited per case (`case_repriced`). A work type change on a delivered case does not re-price it.
+- **Doctor of a delivered case:** only the owner (or a trusted SQL session) may change it; receptionists and the service role get `err.case.delivered_dentist_locked`. A `list` charge then takes the new doctor's current discount, a `manual` charge is kept, and it is always audited (`case_dentist_changed`, old/new doctor and amounts).
+- A case's doctor cannot be changed once it has payments (`err.case.has_payments`).
+- A **direct** update of `case_charges` (trigger depth 1: the owner from the app, or anyone in the SQL editor) sets `price_source = 'manual'` and is audited (`case_price_changed`). Updates made by the triggers above stay `list`.
+- Open cases that existed before 015 got a charge (unpriced, current doctor discount); delivered/cancelled cases from before 015 got none (they never appear in balances).
+
+**When is a charge due?** Only when the case is `delivered` and has a doctor. The date is `cases.delivered_at` (server-managed: set to `now()` by `trg_validate_case_status` on the transition to `delivered`; clients cannot write it; a case inserted directly as `delivered` is stamped by `trg_stamp_delivered_on_insert`). Only rows from before 015 can lack it; they fall back to `cases.created_at` (never `updated_at`, which moves on every edit). Cancelled cases never count. Cases without `dentist_id` are in no doctor's account (the owner dashboard counts them: `delivered_without_dentist_count`).
+
+### `payments` (APPEND-ONLY)
+Owner and receptionist insert and read. `UPDATE`, `DELETE` and `TRUNCATE` are revoked from the API roles, and triggers `trg_payments_no_update_delete` / `trg_payments_no_truncate` refuse them for **every** role, including the database owner (`err.payment.append_only`). Restores are not affected (`pg_restore` loads data with COPY into fresh tables before the triggers exist). The service role has no INSERT/UPDATE/DELETE/TRUNCATE on any of the four money tables.
+
+A per-case payment must name a case of the same doctor that has a charge row and is not cancelled (`err.payment.case_not_billable`); payments without a case are always allowed. The case row is read `FOR SHARE`, so a concurrent doctor change and payment on the same case cannot both commit (not testable on PGlite, which has one connection). `received_by` / `received_at` are set by the database for every API request; only trusted SQL sessions may set them.
+| Column | Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | UUID | PRIMARY KEY | Identifier |
+| `dentist_id` | UUID | NOT NULL, REFERENCES dentists(id) | Doctor who paid |
+| `case_id` | UUID | NULLABLE, REFERENCES cases(id) | Per-case payment; NULL = on account (e.g. monthly). Must belong to the same doctor |
+| `amount` | NUMERIC(12,2) | not 0; > 0 for a payment, < 0 for a reversal | EGP |
+| `method` | TEXT | `cash`, `transfer` or `other` | |
+| `received_at` | TIMESTAMPTZ | NOT NULL | `now()`, forced by trigger for API requests (no back-dating) |
+| `received_by` | UUID | REFERENCES profiles(id) | `auth.uid()`, forced by trigger |
+| `note` | TEXT | up to 2000 chars | |
+| `reverses_payment_id` | UUID | REFERENCES payments(id), unique when set | Correction of an earlier payment |
+| `created_at` | TIMESTAMPTZ | NOT NULL | |
+
+Reversal rules (trigger `trg_payments_validate`): the original must exist and must not itself be a reversal; at most one reversal per payment (checked under a row lock on the original, backed by a partial unique index); `amount = -original.amount`; doctor, case and method are copied from the original. A reversal is allowed even if the case was cancelled since.
+
+### Audit (existing `audit_action` values, no enum change)
+| Change | `action` | `target_type` |
+| :--- | :--- | :--- |
+| Price set or changed | `settings_changed` | `price` (target_id = work type; `details.priced_case_ids`) |
+| Discount set or changed | `settings_changed` | `dentist_discount` |
+| Direct edit of a case price | `settings_changed` | `case_price` (`op` = `case_price_changed`) |
+| Open case re-priced after a work type / doctor change | `settings_changed` | `case_price` (`op` = `case_repriced`) |
+| Doctor of a delivered case changed (owner) | `settings_changed` | `case_price` (`op` = `case_dentist_changed`) |
+| Payment or reversal | `system_event` | `payment` (`details.op` = `payment_recorded` / `payment_reversed`) |
+
+### Functions (SECURITY DEFINER, `search_path = ''`, EXECUTE revoked from PUBLIC/anon)
+| Function | Who | Returns |
+| :--- | :--- | :--- |
+| `get_dentist_statement(p_dentist_id, p_from, p_to)` | owner, receptionist | jsonb: `dentist`, `opening_balance` (before `p_from`), `lines` (delivered cases and payments/reversals in the period, Cairo dates inclusive, ordered by time, with running `balance`; unpriced delivered cases are listed with `priced = false` and not counted; from 017 every line has `is_reversed`, true for a payment that already has a reversal), `total_debit`, `total_credit`, `closing_balance`, `unpriced_count` |
+| `get_dentist_balances()` | owner, receptionist | One row per doctor: `total_due` (delivered, priced), `total_paid` (incl. reversals), `balance`, `unpriced_delivered_count`, `last_payment_at` (latest payment that is not a reversal and was not reversed) |
+| `get_case_balance(p_case_id)` | owner, receptionist | `list_price`, `discount_percent`, `net_amount`, `price_source`, `is_priced`, `is_due` (delivered **and** has a doctor), `paid` (payments on this case, always returned), `remaining` (`net - paid` only when due and priced, otherwise NULL) |
+| `get_owner_dashboard_stats()` | owner | jsonb: count per status, `total`, `overdue` (Cairo date), `active_employees`, `total_outstanding`, `unpriced_delivered_count`, `delivered_without_dentist_count` (KNOWN_ISSUES #16) |
+
+Balance sign: positive = the doctor owes the lab; negative = credit.

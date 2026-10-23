@@ -136,7 +136,12 @@ export interface Case {
   dentist_name_text: string | null;
   clinic_name_text: string | null;
   case_type: string;
+  /** Migration 014: the work is for the upper and/or lower jaw. NULL on cases registered before 014. */
+  upper_jaw: boolean | null;
+  lower_jaw: boolean | null;
+  /** Legacy (before migration 014): no longer entered; shown read-only on old cases. */
   tooth_number: string | null;
+  /** Legacy (before migration 014): no longer entered; shown read-only on old cases. */
   shade: string | null;
   description: string | null;
   special_instructions: string | null;
@@ -159,6 +164,14 @@ export interface Case {
   assigned_technician?: Profile;
   registered_by_profile?: Profile;
 }
+
+/**
+ * What the app sends when registering a case (useCreateCase). case_number, status,
+ * registered_by and timestamps are set by the database. From migration 014 the
+ * database rejects a case from the app unless upper_jaw or lower_jaw is true.
+ */
+export type CaseInsert = Partial<Omit<Case, 'dentist' | 'assigned_technician' | 'registered_by_profile'>> &
+  Pick<Case, 'patient_name' | 'case_type' | 'upper_jaw' | 'lower_jaw'>;
 
 export interface BatchCase {
   id: string;
@@ -254,6 +267,11 @@ export function transitionsForRole(role: AppRole | undefined, from: CaseStatus):
   return next.filter((s) => !RECEPTIONIST_FORBIDDEN_TARGETS.includes(s));
 }
 
+/** Roles that record_case_event (migration 003) lets add case notes. */
+export function canAddCaseNote(role: AppRole | undefined): boolean {
+  return role === 'owner' || role === 'receptionist' || role === 'technician';
+}
+
 // ---- Labels & Colors ----
 
 // Labels come from the Arabic dictionary (src/i18n/ar/enums.ts). The Record types
@@ -303,6 +321,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = ar.enums.auditAc
 const AUDIT_TARGET_LABELS: Record<string, string> = ar.enums.auditTarget;
 const CASE_TYPE_LABELS: Record<string, string> = ar.enums.caseType;
 const SHADE_LABELS: Record<string, string> = ar.enums.shade;
+const JAW_LABELS = ar.enums.jaw;
 
 /**
  * Label for cases.case_type. New cases store the owner's Arabic work-type name, shown as is.
@@ -313,7 +332,23 @@ export function caseTypeLabel(value: string | null | undefined): string {
   return CASE_TYPE_LABELS[value] ?? value;
 }
 
-/** Shade codes (A1, B2...) stay as codes; only named options are translated. */
+/**
+ * Jaw label of a case (migration 014): upper, lower or both jaws.
+ * null when neither is set (cases registered before 014).
+ */
+export function jawLabel(upper: boolean | null | undefined, lower: boolean | null | undefined): string | null {
+  if (upper && lower) return JAW_LABELS.both;
+  if (upper) return JAW_LABELS.upper;
+  if (lower) return JAW_LABELS.lower;
+  return null;
+}
+
+/** True when an old case (before migration 014) has a shade or tooth number to show read-only. */
+export function hasLegacySpecs(c: Pick<Case, 'shade' | 'tooth_number'>): boolean {
+  return Boolean(c.shade?.trim() || c.tooth_number?.trim());
+}
+
+/** Shade codes (A1, B2...) stay as codes; only named options are translated. Legacy data only. */
 export function shadeLabel(value: string | null | undefined): string {
   if (!value) return '—';
   return SHADE_LABELS[value] ?? value;
@@ -324,12 +359,198 @@ export function auditTargetLabel(value: string | null | undefined): string {
   return AUDIT_TARGET_LABELS[value] ?? value;
 }
 
-// Common shade systems
-export const SHADE_OPTIONS = [
-  'A1', 'A2', 'A3', 'A3.5', 'A4',
-  'B1', 'B2', 'B3', 'B4',
-  'C1', 'C2', 'C3', 'C4',
-  'D2', 'D3', 'D4',
-  'BL1', 'BL2', 'BL3', 'BL4',
-  'Custom',
-] as const;
+// ---- Late-case alerts (migration 013, owner + receptionist only) ----
+
+export type LateBucket = 'late' | 'today';
+
+/** Row returned by RPC get_late_cases(). */
+export interface LateCase {
+  id: string;
+  case_number: string;
+  patient_name: string;
+  due_date: string;
+  current_status: CaseStatus;
+  technician_name: string | null;
+  dentist_name: string | null;
+  dentist_phone: string | null;
+  bucket: LateBucket;
+}
+
+/** Row returned by RPC get_late_case_counts(). */
+export interface LateCaseCounts {
+  late_count: number;
+  today_count: number;
+}
+
+// ---- Pricing, discounts, payments and statements (migration 015) ----
+// Visible to active owners and receptionists only (RLS); never shown to
+// technicians or representatives. Amounts are numeric(12,2) in the database
+// and arrive from PostgREST as JSON numbers. Never add or subtract them in the
+// browser: totals and balances come from the database functions below.
+
+/** Egyptian pounds, 2 decimals (numeric(12,2) in the database). */
+export type Money = number;
+
+export type PaymentMethod = 'cash' | 'transfer' | 'other';
+
+/** 'list' = snapshot of the price list; 'manual' = the owner set this case's price. */
+export type PriceSource = 'list' | 'manual';
+
+/** Table price_list: one price per work type (owner writes). */
+export interface PriceListEntry {
+  work_type_id: string;
+  price: Money;
+  updated_at: string;
+  updated_by: string | null;
+}
+
+/** Table dentist_discounts: one discount per doctor, 0–100 % (owner writes). */
+export interface DentistDiscount {
+  dentist_id: string;
+  discount_percent: number;
+  updated_at: string;
+  updated_by: string | null;
+}
+
+/** Table case_charges: created by the database when a case is registered. */
+export interface CaseCharge {
+  case_id: string;
+  /** null = not priced yet. */
+  list_price: Money | null;
+  discount_percent: number;
+  /** Generated: round(list_price * (1 - discount_percent / 100), 2). */
+  net_amount: Money | null;
+  price_source: PriceSource;
+  updated_at: string;
+  updated_by: string | null;
+}
+
+/** Owner edit of a case price: only these columns are writable. */
+export type CaseChargeUpdate = Partial<Pick<CaseCharge, 'list_price' | 'discount_percent'>>;
+
+/** Table payments: append-only. A reversal has a negative amount and reverses_payment_id. */
+export interface Payment {
+  id: string;
+  dentist_id: string;
+  case_id: string | null;
+  amount: Money;
+  method: PaymentMethod;
+  received_at: string;
+  received_by: string | null;
+  note: string | null;
+  reverses_payment_id: string | null;
+  created_at: string;
+}
+
+/**
+ * What the browser sends. received_by / received_at are set by the database.
+ * For a reversal send { reverses_payment_id, amount: -original.amount }; the
+ * doctor, case and method are copied from the original by the database.
+ */
+export type PaymentInsert =
+  | { dentist_id: string; amount: Money; method: PaymentMethod; case_id?: string | null; note?: string | null }
+  | { reverses_payment_id: string; amount: Money; note?: string | null };
+
+/**
+ * Table dentist_opening_balances: optional balance per doctor for the time before
+ * the money module (owner writes; DELETE = no opening balance). amount > 0: the
+ * doctor owes the lab; < 0: credit. Counts on the Cairo date as_of.
+ */
+export interface DentistOpeningBalance {
+  dentist_id: string;
+  amount: Money;
+  /** YYYY-MM-DD */
+  as_of: string;
+  note: string | null;
+  updated_at: string;
+  updated_by: string | null;
+}
+
+/** 'opening' = the doctor's opening balance (رصيد افتتاحي), dated as_of. */
+export type StatementLineKind = 'opening' | 'charge' | 'payment' | 'reversal';
+
+/** One line of get_dentist_statement(). balance = running balance after this line (owed to the lab). */
+export interface StatementLine {
+  kind: StatementLineKind;
+  at: string;
+  /** Cairo date, YYYY-MM-DD. */
+  date: string;
+  case_id: string | null;
+  case_number: string | null;
+  patient_name: string | null;
+  work_type: string | null;
+  list_price: Money | null;
+  discount_percent: number | null;
+  payment_id: string | null;
+  method: PaymentMethod | null;
+  note: string | null;
+  reverses_payment_id: string | null;
+  /** Charge net amount, reversal amount, or a positive opening balance. null for an unpriced charge. */
+  debit: Money | null;
+  /** Payment amount, or a negative opening balance (credit) as a positive number. */
+  credit: Money | null;
+  /** false for a delivered case that has no price yet (not counted). */
+  priced: boolean;
+  /** A payment that already has a reversal (migration 017). false for other lines. */
+  is_reversed: boolean;
+  balance: Money;
+}
+
+/** Result of RPC get_dentist_statement(p_dentist_id, p_from, p_to). */
+export interface DentistStatement {
+  dentist: { id: string; name: string; clinic_name: string | null; phone: string | null };
+  from: string;
+  to: string;
+  opening_balance: Money;
+  total_debit: Money;
+  total_credit: Money;
+  closing_balance: Money;
+  unpriced_count: number;
+  lines: StatementLine[];
+}
+
+/** Row of RPC get_dentist_balances(). balance > 0: the doctor owes the lab. */
+export interface DentistBalance {
+  dentist_id: string;
+  dentist_name: string;
+  clinic_name: string | null;
+  is_active: boolean;
+  total_due: Money;
+  total_paid: Money;
+  balance: Money;
+  unpriced_delivered_count: number;
+  /** Latest payment that is not a reversal and was not reversed. */
+  last_payment_at: string | null;
+  /** Optional opening balance (already included in balance); null when none. */
+  opening_balance: Money | null;
+  opening_as_of: string | null;
+}
+
+/** Row of RPC get_case_balance(p_case_id). */
+export interface CaseBalance {
+  case_id: string;
+  dentist_id: string | null;
+  list_price: Money | null;
+  discount_percent: number | null;
+  net_amount: Money | null;
+  price_source: PriceSource | null;
+  is_priced: boolean;
+  /** true once the case is delivered AND has a doctor (it counts in that doctor's balance). */
+  is_due: boolean;
+  /** Sum of payments on this case (reversals included); returned even when not due. */
+  paid: Money;
+  /** net_amount - paid when due and priced; null otherwise (open, cancelled, no doctor, unpriced). */
+  remaining: Money | null;
+}
+
+/** Result of RPC get_owner_dashboard_stats() (owner only, KNOWN_ISSUES #16). */
+export type OwnerDashboardStats = Record<CaseStatus, number> & {
+  total: number;
+  /** Due before today's Cairo date, not delivered or cancelled. */
+  overdue: number;
+  active_employees: number;
+  total_outstanding: Money;
+  unpriced_delivered_count: number;
+  /** Delivered cases with a charge but no doctor (owed by nobody in the system). */
+  delivered_without_dentist_count: number;
+};
